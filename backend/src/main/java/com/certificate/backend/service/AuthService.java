@@ -1,11 +1,11 @@
 package com.certificate.backend.service;
 
-import com.certificate.backend.exception.SPDException;
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.AuthInfoModel;
-import com.certificate.backend.model.dto.LoginRequest;
-import com.certificate.backend.model.dto.RegisterRequest;
+import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.UserEntity;
+import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.UserRepository;
 import com.certificate.backend.security.JwtTokenService;
@@ -34,10 +34,10 @@ public class AuthService {
     @Transactional
     public void register(RegisterRequest req){
         if(userRepository.existsByUserName(req.getUsername()) || userRepository.existsByEmail(req.getSchoolEmail())){
-            throw new SPDException(400,"Tên đăng nhập hoặc email đã tồn tại!");
+            throw new AppException(ErrorCode.USERNAME_EXIST);
         }
         if (schoolRepository.existsBySchoolCode(req.getSchoolCode())) {
-            throw new SPDException(400, "Mã trường đã tồn tại!");
+            throw new AppException(ErrorCode.SCHOOLCODE_EXIST);
         }
         String encodePassword= passwordEncoder.encode(req.getPassword());
         UserEntity newUser= new UserEntity(req.getUsername(),req.getSchoolEmail(),encodePassword);
@@ -52,7 +52,7 @@ public class AuthService {
     public AuthInfoModel login(String username, String password){
         Optional<UserEntity> userDto = userRepository.findByUserNameOrEmail(username,username);
         if(userDto.isEmpty()){
-            throw new SPDException(401,"Tài khoản hoặc mật khẩu không chính xác!");
+            throw new AppException(ErrorCode.INVALID_USERNAME);
         }
         UserEntity user = userDto.get();
 
@@ -62,14 +62,11 @@ public class AuthService {
 
                 switch (school.getStatus()) {
                     case PENDING:
-                        throw new SPDException(403,
-                                "Tài khoản đang chờ duyệt! Vui lòng liên hệ quản trị viên.");
+                        throw new AppException(ErrorCode.ACCOUNT_PENDING);
                     case REJECTED:
-                        throw new SPDException(403,
-                                "Tài khoản bị từ chối.");
+                        throw new AppException(ErrorCode.ACCOUNT_REJECTED);
                     case SUSPENDED:
-                        throw new SPDException(403,
-                                "Tài khoản bị khóa tạm thời! Vui lòng liên hệ quản trị viên.");
+                        throw new AppException(ErrorCode.ACCOUNT_SUSPENDED);
                     case APPROVED:
                         break; // Cho phép đăng nhập
                 }
@@ -87,7 +84,7 @@ public class AuthService {
             return new AuthInfoModel(accessToken, refreshToken,user.getUserName(),user.getRole(),expirationTime);
         }
         else{
-            throw new SPDException(401, "Tài khoản hoặc mật khẩu không chính xác!");
+            throw new AppException(ErrorCode.INVALID_USERNAME);
         }
     }
 
@@ -95,7 +92,7 @@ public class AuthService {
     public AuthInfoModel refreshToken(String refreshToken) {
         // 1. Tìm user có refresh token này
         UserEntity user = userRepository.findByRefreshToken(refreshToken)
-                .orElseThrow(() -> new SPDException(401, "Refresh Token không hợp lệ!"));
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_REFRESH_TOKEN));
 
         // 2. Kiểm tra thời hạn của Refresh Token
         if (user.getRefreshTokenExpiry().isBefore(LocalDateTime.now())) {
@@ -103,7 +100,7 @@ public class AuthService {
             user.setRefreshToken(null);
             user.setRefreshTokenExpiry(null);
             userRepository.save(user);
-            throw new SPDException(401, "Refresh Token đã hết hạn! Vui lòng đăng nhập lại.");
+            throw new AppException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
         String role = user.getRole();
         // 3. Tạo Access Token mới
@@ -123,7 +120,7 @@ public class AuthService {
     @Transactional
     public void logout(String username){
         UserEntity user = userRepository.findByUserNameOrEmail(username,username)
-                .orElseThrow(() -> new SPDException(404,"Tên đăng nhập không tồn tại!"));
+                .orElseThrow(() -> new AppException(ErrorCode.USERNAME_EXIST));
 
         user.setActiveToken(null);
         user.setRefreshToken(null);

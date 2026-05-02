@@ -1,7 +1,8 @@
 package com.certificate.backend.service;
 
-import com.certificate.backend.exception.SPDException;
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.model.enums.SchoolStatus;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.UserRepository;
@@ -30,11 +31,11 @@ public class AdminService {
 
         // Lấy thông tin trường
         SchoolEntity school = schoolRepository.findById(schoolId)
-                .orElseThrow(() -> new SPDException(404, "Không tìm thấy trường!"));
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
         // Chỉ duyệt được trường đang PENDING
         if (school.getStatus() != SchoolStatus.PENDING) {
-            throw new SPDException(400,
+            throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS,
                     "Trường không ở trạng thái chờ duyệt! Trạng thái hiện tại: "
                             + school.getStatus()
             );
@@ -65,10 +66,10 @@ public class AdminService {
     public void rejectSchool(Long schoolId) {
 
         SchoolEntity school = schoolRepository.findById(schoolId)
-                .orElseThrow(() -> new SPDException(404, "Không tìm thấy trường!"));
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
         if (school.getStatus() != SchoolStatus.PENDING) {
-            throw new SPDException(400, "Chỉ từ chối được trường đang PENDING!");
+            throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ từ chối được trường đang PENDING!");
         }
 
 
@@ -82,10 +83,10 @@ public class AdminService {
     public void suspendSchool(Long schoolId) {
 
         SchoolEntity school = schoolRepository.findById(schoolId)
-                .orElseThrow(() -> new SPDException(404, "Không tìm thấy trường!"));
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
         if (school.getStatus() != SchoolStatus.APPROVED) {
-            throw new SPDException(400, "Chỉ khóa được trường đang APPROVED!");
+            throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ khóa được trường đang APPROVED!");
         }
 
         // ── Bước 1: Gọi smart contract suspendSchool ──
@@ -100,10 +101,10 @@ public class AdminService {
     public void reinstateSchool(Long schoolId) {
 
         SchoolEntity school = schoolRepository.findById(schoolId)
-                .orElseThrow(() -> new SPDException(404, "Không tìm thấy trường!"));
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
         if (school.getStatus() != SchoolStatus.SUSPENDED) {
-            throw new SPDException(400, "Chỉ mở khóa được trường đang SUSPENDED!");
+            throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ mở khóa được trường đang SUSPENDED!");
         }
 
         // Gọi smart contract reinstateSchool

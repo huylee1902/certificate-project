@@ -1,6 +1,7 @@
 package com.certificate.backend.service;
 
-import com.certificate.backend.exception.SPDException;
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.enums.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -46,7 +47,7 @@ public class WalletService {
                     .build();
 
         } catch (Exception e) {
-            throw new SPDException(500,"Không thể tạo ví Blockchain. Vui lòng kiểm tra lại hệ thống mã hóa.");
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 
@@ -67,7 +68,7 @@ public class WalletService {
             return Base64.getEncoder().encodeToString(encrypted);
 
         } catch (Exception e) {
-            throw new SPDException(500,"Lỗi mã hóa private key");
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 
@@ -86,7 +87,7 @@ public class WalletService {
             return new String(cipher.doFinal(decoded));
 
         } catch (Exception e) {
-            throw new SPDException(500,"Lỗi giải mã private key");
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 

@@ -174,48 +174,63 @@ contract CertificateRegistry {
     // SCHOOL: CẤP VĂN BẰNG
     // ==========================================
 
-    function issueCertificate(
-        string memory _certId,
-        string memory _studentName,
-        string memory _studentId,
-        string memory _degreeType,
-        string memory _major,
-        string memory _ipfsHash
-    ) external onlyAuthorizedSchool {
-        require(bytes(_certId).length > 0,      "Ma van bang khong duoc trong!");
-        require(bytes(_studentName).length > 0, "Ten sinh vien khong duoc trong!");
-        require(bytes(_studentId).length > 0,   "Ma sinh vien khong duoc trong!");
-        require(bytes(_ipfsHash).length > 0,    "IPFS hash khong duoc trong!");
-        require(!certificates[_certId].exists,  "Ma van bang da ton tai!");
+    function issueCertificateBatch(
+        string[] memory _certIds,
+        string[] memory _studentNames,
+        string[] memory _studentIds,
+        string[] memory _degreeTypes,
+        string[] memory _majors,
+        string[] memory _ipfsHashes
+    ) public onlyAuthorizedSchool {
+
+        // Kiểm tra tất cả mảng phải cùng độ dài
+        uint256 count = _certIds.length;
+        require(count > 0, "Danh sach khong duoc rong!");
+        require(count <= 50, "Toi da 50 bang moi lan cap!"); // Tránh out of gas
+        require(_studentNames.length == count, "Du lieu khong khop!");
+        require(_studentIds.length   == count, "Du lieu khong khop!");
+        require(_degreeTypes.length  == count, "Du lieu khong khop!");
+        require(_majors.length       == count, "Du lieu khong khop!");
+        require(_ipfsHashes.length   == count, "Du lieu khong khop!");
 
         School storage school = schools[msg.sender];
 
-        certificates[_certId] = Certificate({
-            certId:      _certId,
-            studentName: _studentName,
-            studentId:   _studentId,
-            degreeType:  _degreeType,
-            major:       _major,
-            ipfsHash:    _ipfsHash,
-            issueDate:   block.timestamp,
-            issuedBy:    msg.sender,
-            schoolName:  school.schoolName,
-            schoolCode:  school.schoolCode,
-            isValid:     true,
-            exists:      true
-        });
+        for (uint256 i = 0; i < count; i++) {
 
-        school.totalIssued++;
-        totalIssued++;
+            // Validate từng phần tử
+            require(bytes(_certIds[i]).length > 0,      "Ma van bang khong duoc trong!");
+            require(bytes(_studentNames[i]).length > 0, "Ten sinh vien khong duoc trong!");
+            require(bytes(_studentIds[i]).length > 0,   "Ma sinh vien khong duoc trong!");
+            require(bytes(_ipfsHashes[i]).length > 0,   "IPFS hash khong duoc trong!");
+            require(!certificates[_certIds[i]].exists,  "Ma van bang da ton tai!");
 
-        emit CertificateIssued(
-            _certId,
-            _studentName,
-            _studentId,
-            msg.sender,
-            school.schoolCode,
-            block.timestamp
-        );
+            certificates[_certIds[i]] = Certificate({
+                certId:      _certIds[i],
+                studentName: _studentNames[i],
+                studentId:   _studentIds[i],
+                degreeType:  _degreeTypes[i],
+                major:       _majors[i],
+                ipfsHash:    _ipfsHashes[i],
+                issueDate:   block.timestamp,
+                issuedBy:    msg.sender,
+                schoolName:  school.schoolName,
+                schoolCode:  school.schoolCode,
+                isValid:     true,
+                exists:      true
+            });
+
+            school.totalIssued++;
+            totalIssued++;
+
+            emit CertificateIssued(
+                _certIds[i],
+                _studentNames[i],
+                _studentIds[i],
+                msg.sender,
+                school.schoolCode,
+                block.timestamp
+            );
+        }
     }
 
     // ==========================================

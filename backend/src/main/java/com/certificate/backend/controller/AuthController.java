@@ -3,7 +3,7 @@ package com.certificate.backend.controller;
 
 import com.certificate.backend.model.dto.AuthInfoModel;
 import com.certificate.backend.model.dto.LoginRequest;
-import com.certificate.backend.model.dto.RegisterRequest;
+import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.dto.Request.RefreshTokenRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.service.AuthService;

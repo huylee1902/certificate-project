@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <style>
+        /* 1. ÉP KHỔ GIẤY BẰNG ĐÚNG KÍCH THƯỚC PIXEL CỦA ẢNH (Tuyệt chiêu chống 2 trang) */
+        @page {
+            size: 1123px 794px;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 2. KHÓA CHẶT HTML VÀ BODY, KHÔNG CHO TRÀN (OVERFLOW: HIDDEN) */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 1123px;
+            height: 794px;
+            overflow: hidden;
+            font-family: "Times New Roman", serif;
+        }
+
+        .certificate-container {
+            position: relative;
+            width: 1123px;
+            height: 794px;
+            overflow: hidden;
+        }
+
+        /* Đảm bảo ảnh nền là block để không bị dư khoảng trắng (line-height) ở dưới đáy */
+        .dynamic-background {
+            position: absolute;
+            top: 0; left: 0;
+            width: 1123px;
+            height: 794px;
+            z-index: 0;
+            display: block;
+        }
+
+        .field {
+            position: absolute;
+            z-index: 10;
+            font-size: 18px;
+            color: black;
+            width: 400px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        /* TỌA ĐỘ BÊN TIẾNG VIỆT */
+        .major-vn { top: 280px; left: 645px; font-size: 20px; font-weight: bold; text-transform: uppercase; }
+        .name-vn { top: 343px; left: 646px; font-size: 21px; font-weight: bold; color: black; }
+        .dob-vn { top: 381px; left: 644px; }
+        .grad-year-vn { top: 416px; left: 644px; }
+        .degree-type-vn { top: 453px; left: 647px; }
+        .training-type-vn { top: 487px; left: 647px; }
+
+        /* TỌA ĐỘ BÊN TIẾNG ANH */
+        .major-en { top: 280px; left: 92px; font-size: 20px; font-weight: bold; text-transform: uppercase; }
+        .name-en { top: 341px; left: 104px; font-size: 21px; font-weight: bold; color:black; }
+        .dob-en { top: 380px; left: 105px; }
+        .grad-year-en { top: 417px; left: 93px; }
+        .degree-type-en { top: 453px; left: 100px; }
+        .training-type-en { top: 487px; left: 100px; }
+
+    </style>
+</head>
+<body>
+
+<div class="certificate-container">
+
+    <img class="dynamic-background" th:src="${backgroundImageUrl}" />
+
+    <div class="field major-vn" th:text="${majorVi}">CÔNG NGHỆ THÔNG TIN</div>
+    <div class="field name-vn" th:text="${studentName}">Nguyễn Đức Luận</div>
+    <div class="field dob-vn" th:text="${dob}">06.02.2003</div>
+    <div class="field grad-year-vn" th:text="${gradYear}">2026</div>
+    <div class="field degree-type-vn" th:text="${degreeType}">Xuất Sắc</div>
+    <div class="field training-type-vn" th:text="${trainingType}">Chính quy</div>
+
+    <div class="field major-en" th:text="${majorEn}">IN INFORMATION TECHNOLOGY</div>
+    <div class="field name-en" th:text="${studentNameEn}">Nguyen Duc Luan</div>
+    <div class="field dob-en" th:text="${dobEn}">06 February 2003</div>
+    <div class="field grad-year-en" th:text="${gradYear}">2026</div>
+    <div class="field degree-type-en" th:text="${degreeTypeEn}">Excellent</div>
+    <div class="field training-type-en" th:text="${trainingTypeEn}">Full-time</div>
+
+</div>
+
+</body>
+</html>

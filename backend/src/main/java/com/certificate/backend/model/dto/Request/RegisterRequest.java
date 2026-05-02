@@ -1,4 +1,4 @@
-package com.certificate.backend.model.dto;
+package com.certificate.backend.model.dto.Request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -11,7 +11,7 @@ public class RegisterRequest {
 
 
     @NotBlank(message = "Mật khẩu không được để trống")
-    @Size(min = 8, message = "Mật khẩu phải có ít nhất 6 ký tự")
+    @Size(min = 8, message = "Mật khẩu phải có ít nhất 8 ký tự")
     private String password;
 
     @NotBlank(message = "Email trường không được để trống")

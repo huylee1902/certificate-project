@@ -46,7 +46,17 @@ public class SecurityConfig {
                                 "/api/auth/refresh",
                                 "/api/certificates/verify/**"
                         ).permitAll()
-                        .requestMatchers("/api/schools/**").hasRole("ADMIN")
+                        .requestMatchers(
+                                "/api/schools/*/approve",
+                                "/api/schools/*/reject",
+                                "/api/schools/*/suspend",
+                                "/api/schools/*/reinstate"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                "/api/schools/*/upload-background"
+                        ).hasRole("SCHOOL")
+                        .requestMatchers("/api/schools/*/certificates/export/**").permitAll()
 
                         // Tất cả endpoint còn lại BẮT BUỘC phải có token hợp lệ
                         .anyRequest().authenticated()

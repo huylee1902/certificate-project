@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/schools")
-@RequiredArgsConstructor
+
 public class SchoolController {
     @Autowired
     private AdminService adminService;

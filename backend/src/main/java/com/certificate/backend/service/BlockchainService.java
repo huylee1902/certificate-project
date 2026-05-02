@@ -1,7 +1,8 @@
 package com.certificate.backend.service;
 
 import com.certificate.backend.contract.CertificateRegistry;
-import com.certificate.backend.exception.SPDException;
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.enums.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -64,7 +65,7 @@ public class BlockchainService {
 
         } catch (Exception e) {
             log.error("authorizeSchool thất bại: {}", e.getMessage());
-            throw new SPDException(500, "Lỗi kết nối Blockchain khi duyệt trường: " + e.getMessage());
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 
@@ -80,7 +81,7 @@ public class BlockchainService {
             return receipt.getTransactionHash();
 
         } catch (Exception e) {
-            throw new SPDException(500, "Lỗi kết nối Blockchain khi khóa trường: " + e.getMessage());
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 
@@ -95,7 +96,7 @@ public class BlockchainService {
             return receipt.getTransactionHash();
 
         } catch (Exception e) {
-            throw new SPDException(500, "Lỗi kết nối Blockchain khi khóa trường: " + e.getMessage());
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
         }
     }
 }

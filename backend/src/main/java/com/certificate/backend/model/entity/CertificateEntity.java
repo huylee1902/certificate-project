@@ -22,17 +22,8 @@ public class CertificateEntity {
     @Column(unique = true,nullable = false,length = 100)
     private String certId;
 
-    @Column(nullable = false, length = 100)
-    private String studentName;
-
-    @Column(nullable = false, length = 50)
-    private String studentId;
-
-    @Column(length = 50)
-    private String degreeType;
-
     @Column(length = 100)
-    private String major;
+    private String transactionHash;
 
     @Column(length = 100)
     private String ipfsHash;
@@ -40,9 +31,9 @@ public class CertificateEntity {
     @Column(name="issueDate")
     private LocalDateTime issueDate;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     @Builder.Default
-    private Boolean isValid = true;
+    private String status = "ISSUED";
 
     private LocalDateTime revokedAt;
     @Column(length = 500)
@@ -51,5 +42,9 @@ public class CertificateEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "schoolId",nullable = false)
     private SchoolEntity school;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "studentId", nullable = false)
+    private StudentEntity student;
 
 }
