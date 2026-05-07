@@ -23,10 +23,13 @@ public class CertificateEntity {
     private String certId;
 
     @Column(length = 100)
-    private String transactionHash;
+    private String txHash;
 
     @Column(length = 100)
     private String ipfsHash;
+
+    @Column(nullable = false, length = 50)
+    private String regNo;
 
     @Column(name="issueDate")
     private LocalDateTime issueDate;

@@ -28,6 +28,7 @@ public enum ErrorCode {
     ACCOUNT_PENDING(403, "Tài khoản đang chờ duyệt! Vui lòng liên hệ quản trị viên"),
     ACCOUNT_REJECTED(403, "Tài khoản bị từ chối"),
     ACCOUNT_SUSPENDED(403, "Tài khoản bị khóa tạm thời! Vui lòng liên hệ quản trị viên"),
+    TRANSACTION_FAILED(403,"Giao dịch thất bại!"),
 
 
     FOLDER_CREATE_FAILED(500, "Không thể khởi tạo thư mục lưu file"),

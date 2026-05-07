@@ -27,6 +27,8 @@ public class SchoolEntity {
 
     private String address;
 
+    private String rectorName;
+
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private SchoolStatus status ;

@@ -1,19 +1,22 @@
 package com.certificate.backend.service;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 import com.lowagie.text.pdf.BaseFont;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import com.certificate.backend.model.entity.StudentEntity;
-
 import org.thymeleaf.context.Context;
 import org.xhtmlrenderer.pdf.ITextRenderer;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Locale;
+import java.util.Base64;
 
 @Service
 public class PdfExportService {
@@ -22,67 +25,65 @@ public class PdfExportService {
     private TemplateEngine templateEngine;
 
     @Autowired
-    private UploadService uploadService;
-
-    @Autowired
     private TranslationService translationService;
 
-    public byte[] generatePdfBytes(StudentEntity student, Long schoolId) throws Exception {
+    // TODO: Thay bằng link Ngrok thực tế của bạn khi chạy (ví dụ: ngrok http 3000)
+    private final String NGROK_BASE_URL = "https://abcd-1234.ngrok-free.app";
+
+    // Truyền thêm degreeNo và regNo từ hàm Cấp Bằng vào đây
+    public byte[] generatePdfBytes(StudentEntity student, String certId, String regNo) throws Exception {
         Context context = new Context();
 
-        // ── TIẾNG VIỆT ──────────────────────────────────────────────
+        // ── 1. THÔNG TIN CHUNG VÀ MÃ XÁC THỰC ────────────────────────
+        context.setVariable("university", "HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG");
+        context.setVariable("rectorName", student.getSchool().getRectorName());
+        context.setVariable("date", LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        context.setVariable("degreeNo", certId);
+        context.setVariable("regNo", regNo);
+
+        // Tạo QR Code dẫn tới link Ngrok
+        String verifyUrl = NGROK_BASE_URL + "/verify?degreeNo=" + certId;
+        context.setVariable("qrBase64", generateQRCodeBase64(verifyUrl));
+
+
+        // ── 2. CỘT PHẢI (TIẾNG VIỆT) ──────────────────────────────────
+        context.setVariable("universityVi",student.getSchool().getSchoolName().toUpperCase());
         context.setVariable("majorVi", student.getMajor().toUpperCase());
-        context.setVariable("studentName",  student.getFullName().toUpperCase());
-        context.setVariable("dob",          student.getDob().format(
-                DateTimeFormatter.ofPattern("dd.MM.yyyy")));
-
-        context.setVariable("gradYear", LocalDate.now().getYear());
-
-        context.setVariable("degreeType",   student.getDegreeType());
-        context.setVariable("trainingType", student.getTrainingType());
+        context.setVariable("fullNameVi", student.getFullName().toUpperCase());
+        context.setVariable("dobVi", student.getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        context.setVariable("gradYearVi", String.valueOf(LocalDate.now().getYear()));
+        context.setVariable("classificationVi", student.getDegreeType()); // Giả sử entity có trường này
+        context.setVariable("modeOfStudyVi", student.getTrainingType());
 
 
-        // ── TIẾNG ANH (qua StudentTranslationService) ───────────────
+        // ── 3. CỘT TRÁI (TIẾNG ANH - Qua TranslationService) ──────────
+        context.setVariable("universityEn",translationService.translateSchoolName(student.getSchool().getSchoolName().toUpperCase()));
         context.setVariable("majorEn", translationService.translateMajor(student.getMajor().toUpperCase()));
-        context.setVariable("studentNameEn",
-                translationService.removeAccents(student.getFullName()).toUpperCase());
-
+        context.setVariable("fullNameEn", translationService.removeAccents(student.getFullName()).toUpperCase());
         context.setVariable("dobEn", translationService.formatDateToEnglish(student.getDob()));
-
-        context.setVariable("degreeTypeEn",
-                translationService.translateDegree(student.getDegreeType()));
-
-        context.setVariable("trainingTypeEn",
-                translationService.translateTrainingType(student.getTrainingType()));
+        context.setVariable("gradYearEn", String.valueOf(LocalDate.now().getYear()));
+        context.setVariable("classificationEn", translationService.translateDegree(student.getDegreeType()));
+        context.setVariable("modeOfStudyEn", translationService.translateTrainingType(student.getTrainingType()));
 
 
-
-        // ── ẢNH PHÔI BẰNG ───────────────────────────────────────────
-        context.setVariable("backgroundImageUrl",
-                uploadService.getBackgroundUri(schoolId));
-
-        // ── RENDER HTML → PDF ────────────────────────────────────────
+        // ── 4. RENDER HTML → PDF BẰNG FLYING SAUCER ────────────────────
         String htmlContent = templateEngine.process("certificate", context);
 
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ITextRenderer renderer = new ITextRenderer();
 
-            // Nạp đủ bộ font Times New Roman (bắt buộc cho tiếng Việt)
+            // Nạp đủ bộ font Times New Roman để không bị lỗi Font tiếng Việt
             addFont(renderer, "fonts/times.ttf");
             addFont(renderer, "fonts/timesbd.ttf");
             addFont(renderer, "fonts/timesi.ttf");
             addFont(renderer, "fonts/timesbi.ttf");
 
-            // Base URL để Flying Saucer resolve ảnh phôi bằng
-            //String baseUrl = new ClassPathResource("").getURL().toString();
             renderer.setDocumentFromString(htmlContent);
             renderer.layout();
             renderer.createPDF(out);
 
             return out.toByteArray();
-
         }
-
     }
 
     private void addFont(ITextRenderer renderer, String resourcePath) throws Exception {
@@ -90,4 +91,13 @@ public class PdfExportService {
         renderer.getFontResolver().addFont(fontUrl, BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
     }
 
+    // Hàm phụ trợ tạo QR Code thành chuỗi Base64
+    private String generateQRCodeBase64(String text) throws Exception {
+        QRCodeWriter qrCodeWriter = new QRCodeWriter();
+        // Kích thước 150x150 là vừa đẹp cho góc văn bằng
+        BitMatrix bitMatrix = qrCodeWriter.encode(text, BarcodeFormat.QR_CODE, 150, 150);
+        ByteArrayOutputStream pngOutputStream = new ByteArrayOutputStream();
+        MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
+        return Base64.getEncoder().encodeToString(pngOutputStream.toByteArray());
+    }
 }

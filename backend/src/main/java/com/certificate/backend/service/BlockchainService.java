@@ -11,6 +11,8 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
 import org.web3j.tx.gas.DefaultGasProvider;
 
+import java.util.List;
+
 
 @Service
 @Slf4j
@@ -92,6 +94,39 @@ public class BlockchainService {
             );
 
             var receipt = registry.reinstateSchool(schoolWalletAddress).send();
+
+            return receipt.getTransactionHash();
+
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
+        }
+    }
+
+    public String issueBatch(
+            String schoolPrivateKey,
+            List<String> certIds,
+            List<String> studentNames,
+            List<String> studentIds,
+            List<String> degreeTypes,
+            List<String> majors,
+            List<String> ipfsHashes
+    ) {
+        try {
+            // TẠO CREDENTIALS BẰNG PRIVATE KEY CỦA TRƯỜNG, KHÔNG PHẢI CỦA ADMIN
+            Credentials schoolCredentials = Credentials.create(schoolPrivateKey);
+
+            CertificateRegistry registry = CertificateRegistry.load(
+                    contractAddress, web3j, schoolCredentials, new DefaultGasProvider()
+            );
+
+            // Gọi hàm issueCertificateBatch trong Smart Contract của bạn
+            var receipt = registry.issueCertificateBatch(
+                    certIds, studentNames, studentIds, degreeTypes, majors, ipfsHashes
+            ).send();
+
+            if (!receipt.isStatusOK()) {
+                throw new AppException(ErrorCode.TRANSACTION_FAILED);
+            }
 
             return receipt.getTransactionHash();
 

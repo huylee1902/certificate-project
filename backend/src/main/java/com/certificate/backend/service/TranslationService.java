@@ -63,6 +63,24 @@ public class TranslationService {
         };
     }
 
+    public String translateSchoolName(String schoolName) {
+        if (schoolName == null) return "";
+        return switch (schoolName.trim().toLowerCase()) {
+            case "học viện công nghệ bưu chính viễn thông" -> "Posts and Telecommunications Institute of Technology";
+            case "đại học bách khoa hà nội"                -> "Hanoi University of Science and Technology";
+            case "đại học quốc gia hà nội"                 -> "Vietnam National University, Hanoi";
+            case "đại học kinh tế quốc dân"                -> "National Economics University";
+            case "đại học ngoại thương"                    -> "Foreign Trade University";
+            case "đại học công nghệ thông tin"             -> "University of Information Technology";
+            case "đại học khoa học tự nhiên"               -> "University of Science";
+            case "đại học sư phạm kỹ thuật"                -> "University of Technical Education";
+            case "đại học kiến trúc"                       -> "University of Architecture";
+            case "đại học thương mại"                      -> "Thuongmai University";
+            // Thêm các trường khác của bạn vào đây...
+            default -> removeAccents(schoolName); // Fallback: Nếu không có trong từ điển thì in ra tên tiếng Việt không dấu
+        };
+    }
+
     public String formatDateToEnglish(LocalDate date) {
         if (date == null) return "";
         return date.format(DateTimeFormatter.ofPattern("dd MMMM yyyy", Locale.ENGLISH));
