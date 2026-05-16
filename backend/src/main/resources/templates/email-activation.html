@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #ffffff;">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #0056b3; margin: 0;">HỆ THỐNG XÁC THỰC VĂN BẰNG</h2>
+        <p style="color: #666; font-size: 14px; margin-top: 5px;">Thông báo phê duyệt tài khoản</p>
+    </div>
+
+    <div style="padding: 20px; border-radius: 8px; border: 1px solid #eeeeee; background-color: #f9f9f9;">
+        <p style="color: #333;">Kính gửi <b th:text="${schoolName}">Tên Trường Của Bạn</b>,</p>
+        <p style="color: #333; line-height: 1.6;">Chúc mừng! Hồ sơ đăng ký tham gia Hệ thống Xác thực Văn bằng Blockchain của trường đã được Bộ/Sở Giáo dục phê duyệt thành công.</p>
+        <p style="color: #333; line-height: 1.6;">Để bảo mật hệ thống, vui lòng click vào nút bên dưới để <b>xác thực địa chỉ email</b> và chính thức kích hoạt tài khoản của bạn:</p>
+
+        <div style="text-align: center; margin: 35px 0;">
+            <a th:href="${activationLink}"
+               style="background-color: #28a745; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                KÍCH HOẠT TÀI KHOẢN NGAY
+            </a>
+        </div>
+
+        <p style="color: #777; font-size: 13px; line-height: 1.5;"><i>*Lưu ý: Đường link bảo mật này chỉ có hiệu lực trong vòng 24 giờ. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.</i></p>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+        <p>&copy; 2026 Hệ thống Xác thực Văn bằng Blockchain. All rights reserved.</p>
+    </div>
+</div>
+</body>
+</html>

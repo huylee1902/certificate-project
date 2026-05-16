@@ -2,13 +2,17 @@ package com.certificate.backend.service;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.entity.UserEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.model.enums.SchoolStatus;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.UserRepository;
+import com.certificate.backend.security.TokenBlacklistService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 
 @Service
@@ -22,9 +26,11 @@ public class AdminService {
 
     @Autowired
     private BlockchainService blockchainService;
+    @Autowired
+    private EmailService emailService;
 
     @Autowired
-    private UserRepository userRepository;
+    private TokenBlacklistService tokenBlacklistService;
 
     @Transactional
     public void approveSchool(Long schoolId) {
@@ -41,22 +47,33 @@ public class AdminService {
             );
         }
 
-        // ── Bước 1: Tạo ví cho trường ────────────────
         WalletService.WalletInfo wallet = walletService.createWallet();
 
-        // ── Bước 2: Gọi smart contract ────────────────
-        // Nếu blockchain lỗi → exception → @Transactional rollback DB
-        // → Không bị trạng thái nửa vời
-        String txHash = blockchainService.authorizeSchool(
+        blockchainService.fundSchoolWallet(wallet.getWalletAddress(), "20.0");
+
+        // Cấp quyền trên Smart Contract
+        blockchainService.authorizeSchool(
                 wallet.getWalletAddress(),
                 school.getSchoolName(),
                 school.getSchoolCode()
         );
 
-        // ── Bước 3: Cập nhật DB ───────────────────────
-
         school.setWalletAddress(wallet.getWalletAddress());
         school.setPrivateKeyEncrypted(wallet.getPrivateKeyEncrypted());
+        String token = java.util.UUID.randomUUID().toString();
+        school.getUser().setActiveToken(token);
+        school.getUser().setActiveTokenExpiry(LocalDateTime.now().plusHours(24));
+        school.getUser().setActive(false);          // Chưa click link mail thì chưa cho login
+
+        // --- GỌI EMAIL SERVICE GỌN GÀNG ---
+        String activationLink = "http://localhost:5173/activate?token=" + token;
+
+        emailService.sendActivationEmail(
+                school.getUser().getEmail(), // Lấy email của trường
+                "Xác thực & Kích hoạt tài khoản Hệ thống Văn bằng",
+                school.getSchoolName(),
+                activationLink
+        );
         school.setStatus(SchoolStatus.APPROVED);
         schoolRepository.save(school);
 
@@ -92,6 +109,8 @@ public class AdminService {
         // ── Bước 1: Gọi smart contract suspendSchool ──
         blockchainService.suspendSchool(school.getWalletAddress());
 
+        UserEntity user = school.getUser();
+        tokenBlacklistService.blacklistUser(user.getUserName(), 1800000);
         // ── Bước 2: Cập nhật DB ───────────────────────
         school.setStatus(SchoolStatus.SUSPENDED);
         schoolRepository.save(school);

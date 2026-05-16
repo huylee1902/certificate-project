@@ -1,4 +1,4 @@
-package com.certificate.backend.model.dto;
+package com.certificate.backend.model.dto.Request;
 
 import jakarta.validation.constraints.NotBlank;
 

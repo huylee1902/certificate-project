@@ -2,16 +2,25 @@ package com.certificate.backend.service;
 
 import com.certificate.backend.contract.CertificateRegistry;
 import com.certificate.backend.exception.AppException;
+import com.certificate.backend.exception.BlockchainException;
 import com.certificate.backend.model.enums.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.methods.response.TransactionReceipt;
 import org.web3j.protocol.http.HttpService;
+import org.web3j.tuples.generated.Tuple12;
+import org.web3j.tx.Transfer;
 import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.utils.Convert;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 
 @Service
@@ -67,7 +76,7 @@ public class BlockchainService {
 
         } catch (Exception e) {
             log.error("authorizeSchool thất bại: {}", e.getMessage());
-            throw new AppException(ErrorCode.INTERNAL_ERROR);
+            throw new BlockchainException("Lỗi authorizeSchool :"+e.getMessage());
         }
     }
 
@@ -83,7 +92,7 @@ public class BlockchainService {
             return receipt.getTransactionHash();
 
         } catch (Exception e) {
-            throw new AppException(ErrorCode.INTERNAL_ERROR);
+            throw new BlockchainException("Lỗi từ chối trường: "+e.getMessage());
         }
     }
 
@@ -98,7 +107,7 @@ public class BlockchainService {
             return receipt.getTransactionHash();
 
         } catch (Exception e) {
-            throw new AppException(ErrorCode.INTERNAL_ERROR);
+            throw new BlockchainException("Lỗi mở khóa trường:" + e.getMessage());
         }
     }
 
@@ -131,7 +140,103 @@ public class BlockchainService {
             return receipt.getTransactionHash();
 
         } catch (Exception e) {
-            throw new AppException(ErrorCode.INTERNAL_ERROR);
+            throw new BlockchainException("Chi tiết lỗi Blockchain: " + e.getMessage(), e);
+        }
+    }
+
+
+    public String fundSchoolWallet(String targetWalletAddress, String ethAmount) {
+        log.info("Đang xử lý bơm {} ETH cho ví trường: {}", ethAmount, targetWalletAddress);
+        try {
+            // Hàm Transfer.sendFunds tự động lấy adminCredentials (ví giàu)
+            // ký giao dịch chuyển tiền sang targetWalletAddress
+            TransactionReceipt receipt = Transfer.sendFunds(
+                    web3j,
+                    adminCredentials,
+                    targetWalletAddress,
+                    new BigDecimal(ethAmount),
+                    Convert.Unit.ETHER
+            ).send();
+
+            if (!receipt.isStatusOK()) {
+                throw new BlockchainException("Giao dịch chuyển ETH bị Revert!");
+            }
+
+            return receipt.getTransactionHash();
+
+        } catch (Exception e) {
+            throw new BlockchainException("Không thể nạp ETH cho ví trường học: " + e.getMessage(), e);
+        }
+    }
+
+    public String revokeCertificate(String schoolPrivateKey, String certificateId) {
+        try {
+            // Dùng Private Key của trường để tạo Credentials
+            Credentials schoolCredentials = Credentials.create(schoolPrivateKey);
+
+            CertificateRegistry registry = CertificateRegistry.load(
+                    contractAddress, web3j, schoolCredentials, new DefaultGasProvider()
+            );
+
+            // Gọi hàm thu hồi trong Smart Contract
+            var receipt = registry.revokeCertificate(certificateId).send();
+
+            if (!receipt.isStatusOK()) {
+                throw new BlockchainException("Giao dịch thu hồi bị Blockchain từ chối (Reverted). TxHash: " + receipt.getTransactionHash());
+            }
+
+            log.info("Thu hồi thành công văn bằng {} - TxHash: {}", certificateId, receipt.getTransactionHash());
+            return receipt.getTransactionHash();
+
+        } catch (Exception e) {
+            log.error("Lỗi khi thu hồi văn bằng trên Blockchain: ", e);
+            throw new BlockchainException("Lỗi thu hồi Blockchain: " + e.getMessage(), e);
+        }
+    }
+
+    public Map<String, Object> getCertificate(String certId) {
+        try {
+            // Load contract bằng quyền Read-only (Dùng ví Admin để đọc dữ liệu public)
+            CertificateRegistry registry = CertificateRegistry.load(
+                    contractAddress, web3j, adminCredentials, new DefaultGasProvider()
+            );
+
+            // Gọi hàm verifyCertificate trên Smart Contract
+            // Kết quả trả về là một Tuple chứa 12 phần tử (tương ứng 12 biến returns trong Solidity)
+            Tuple12<Boolean, Boolean, String, String, String, String, String, String, BigInteger, String, String, String> result
+                    = registry.verifyCertificate(certId).send();
+
+            // component1() chính là biến 'found'
+            Boolean isFound = result.component1();
+
+            // Nếu found == false, nghĩa là bằng không tồn tại
+            if (!isFound) {
+                return null;
+            }
+
+            // Bóc tách các trường còn lại theo đúng thứ tự trong Solidity
+            Boolean isValid = result.component2();
+            String studentName = result.component4();
+            String degreeType = result.component6();
+            String major = result.component7();
+            String ipfsHash = result.component8();
+
+            // Đóng gói vào Map trả về cho Controller
+            Map<String, Object> info = new HashMap<>();// chứa được nhiều kiểu dữ liệu khác nhau trong cùng một cái Map.
+            info.put("studentName", studentName);
+            info.put("degreeType", degreeType);
+            info.put("major", major);
+            info.put("ipfsHash",ipfsHash);
+
+            // CHÚ Ý: Smart Contract dùng 'isValid'.
+            // Nếu isValid == false tức là bằng đã bị thu hồi (isRevoked = true).
+            info.put("isRevoked", !isValid);
+
+            return info;
+
+        } catch (Exception e) {
+            log.error("Lỗi tra cứu Blockchain cho ID {}: {}", certId, e.getMessage());
+            return null;
         }
     }
 }

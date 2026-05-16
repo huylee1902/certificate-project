@@ -28,6 +28,9 @@ public class CertificateEntity {
     @Column(length = 100)
     private String ipfsHash;
 
+    @Column(name = "file_hash", unique = true)
+    private String fileHash;
+
     @Column(nullable = false, length = 50)
     private String regNo;
 

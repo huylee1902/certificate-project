@@ -1,21 +1,20 @@
 package com.certificate.backend.controller;
 
 
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.AuthInfoModel;
-import com.certificate.backend.model.dto.LoginRequest;
+import com.certificate.backend.model.dto.Request.LoginRequest;
 import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.dto.Request.RefreshTokenRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
+import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -50,9 +49,36 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<?> logout(@AuthenticationPrincipal UserDetails userDetails){
-        String username = userDetails.getUsername();
-        authService.logout(username);
+    public ApiResponse<?> logout(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ApiResponse.error(401, "Thiếu token hoặc token không đúng định dạng!");
+        }
+
+        // Bóc tách lấy đúng chuỗi token
+        String token = authHeader.substring(7);
+
+        // ĐẨY TOÀN BỘ LOGIC XUỐNG SERVICE CỦA BẠN
+        authService.logout(token);
+
         return ApiResponse.success("Đăng xuất thành công!");
+    }
+
+    @GetMapping("/activate")
+    public ApiResponse<?> activateAccount(@RequestParam("token") String token) {
+        String message = authService.activateAccount(token);
+
+        return ApiResponse.success(message);
+    }
+
+    @PostMapping("/resend-activation")
+    public ApiResponse<?> resendActivation(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        if (email == null || email.isEmpty()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        authService.resendActivationEmail(email);
+        return ApiResponse.success("Liên kết kích hoạt mới đã được gửi vào email của bạn.");
     }
 }

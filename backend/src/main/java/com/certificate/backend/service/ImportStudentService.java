@@ -41,8 +41,8 @@ public class ImportStudentService {
             DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     @Transactional
-    public ImportResultDto importStudents(MultipartFile file, long userId) throws Exception {
-        SchoolEntity school = schoolRepository.findByUserId(userId)
+    public ImportResultDto importStudents(MultipartFile file, Long schoolId) throws Exception {
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
                 .orElseThrow(() -> new AppException(
                         ErrorCode.SCHOOL_NOT_FOUND,
                         "Không tìm thấy trường học!"));

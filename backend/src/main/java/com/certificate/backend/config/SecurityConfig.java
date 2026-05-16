@@ -12,6 +12,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.CorsConfigurationSource;
+
+import java.util.Arrays;
 
 @Configuration
 @RequiredArgsConstructor
@@ -31,7 +36,7 @@ public class SecurityConfig {
                 // Tắt CSRF vì dùng JWT (stateless, không dùng cookie)
                 // CSRF chỉ cần khi dùng session + cookie
                 .csrf(AbstractHttpConfigurer::disable)
-
+                .cors(c -> c.configurationSource(corsConfigurationSource()))
                 // Tắt session - mỗi request phải tự mang token
                 // STATELESS: server không lưu trạng thái của client
                 .sessionManagement(session ->
@@ -44,19 +49,22 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/register",
                                 "/api/auth/refresh",
-                                "/api/certificates/verify/**"
+                                "/api/certificates/verify/**",
+                                "/api/certificates/search"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/schools/*/approve",
                                 "/api/schools/*/reject",
                                 "/api/schools/*/suspend",
                                 "/api/schools/*/reinstate"
-                        ).hasRole("ADMIN")
+                        ).hasAuthority("ADMIN")
+
 
                         .requestMatchers(
-                                "/api/schools/*/upload-background"
-                        ).hasRole("SCHOOL")
-                        .requestMatchers("/api/schools/*/certificates/export/**").permitAll()
+                                "/api/schools/certificates/issue",
+                                "/api/schools/certificates/revoke/*"
+                        )
+                        .hasAuthority("SCHOOL")
 
                         // Tất cả endpoint còn lại BẮT BUỘC phải có token hợp lệ
                         .anyRequest().authenticated()
@@ -68,5 +76,17 @@ public class SecurityConfig {
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173")); // Port của React
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        configuration.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }

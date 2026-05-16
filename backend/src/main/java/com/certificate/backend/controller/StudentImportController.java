@@ -4,10 +4,10 @@ import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.ImportResultDto;
 import com.certificate.backend.model.enums.ErrorCode;
-import com.certificate.backend.security.SecurityUserDetails;
+import com.certificate.backend.security.JwtPrincipal;
 import com.certificate.backend.service.ImportStudentService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,14 +26,11 @@ public class StudentImportController {
 
     @PostMapping("/import")
     public ApiResponse<ImportResultDto> importStudents(
-            @RequestParam("file") MultipartFile file) throws Exception {
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal JwtPrincipal principal) throws Exception {
 
         validateFile(file); // Ném AppException nếu file không hợp lệ
-
-        SecurityUserDetails currentUser = (SecurityUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Long userId = currentUser.getUserId();
-
-        ImportResultDto result = importStudentService.importStudents(file, userId);
+        ImportResultDto result = importStudentService.importStudents(file, principal.getSchoolId());
 
         return ApiResponse.success(
                 result,

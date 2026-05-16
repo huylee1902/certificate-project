@@ -2,9 +2,9 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
-    <title>Bằng Kỹ Sư</title>
+    <title>Bằng Kỹ Sư - Bản Chuẩn Cân Bằng</title>
     <style>
-        /* 1. XÓA BỎ LỀ MẶC ĐỊNH, CHUẨN A4 NGANG */
+        /* 1. KHỔ GIẤY A4 NGANG */
         @page {
             size: 297mm 210mm;
             margin: 0;
@@ -14,53 +14,85 @@
             font-family: "Times New Roman", Times, serif;
             margin: 0;
             padding: 0;
-            background-color: #fff; /* Nền trắng chuẩn PDF */
+            background-color: #fff;
         }
 
-        /* 2. KHUNG GIẤY A4 */
         .a4-page {
             width: 297mm;
             height: 210mm;
-            background-color: #fff;
             margin: 0;
             overflow: hidden;
         }
 
-        /* 3. KHUNG VIỀN TRANG TRÍ (Đã tính toán trừ hao lề chuẩn) */
+        /* 2. KHUNG VIỀN MỞ RỘNG (Sát mép 5mm) */
         .cert-outer-border {
-            width: 271mm;
-            height: 184mm;
-            margin: 10mm;
-            border: 3mm solid #d4af37;
+            width: 283mm;
+            height: 196mm;
+            margin: 5mm auto;
+            border: 2mm solid #d4af37;
             padding: 1mm;
             background-color: #fff;
         }
 
         .cert-inner-border {
-            width: 267mm;
-            height: 180mm;
+            width: 281mm;
+            height: 194mm;
             border: 1mm solid #b8860b;
             background-color: #fdfbf4;
-            padding: 0;
+            position: relative;
         }
 
-        /* 4. BẢNG MASTER CHIA 3 KHU VỰC VỚI CHIỀU CAO CHUẨN 180MM */
+        /* 3. KHÓA CHẶT TỶ LỆ 50-50 VÀ CHỐNG CO GIÃN CỘT */
         .master-table {
             width: 100%;
+            table-layout: fixed; /* Bắt buộc để 2 cột luôn bằng nhau */
             border-collapse: collapse;
         }
 
-        /* Typography */
-        .title-sm { font-size: 13pt; font-weight: bold; margin: 0 0 4px 0; }
+        /* Định dạng văn bản */
+        .title-sm { font-size: 13pt; font-weight: bold; margin: 0 0 5px 0; text-transform: uppercase; }
         .motto { font-size: 12pt; font-weight: bold; margin: 0; }
-        .uni-name { font-size: 14pt; font-weight: bold; color: #1a3b5c; text-transform: uppercase; margin: 0 0 10px 0; }
-        .degree-name { font-size: 22pt; font-weight: bold; color: #cc0000; margin: 0 0 25px 0; } /* Tăng margin bottom để giãn cách */
+        .title-deco { width: 35%; border-top: 1.5px solid #b8860b; margin: 8px auto 0 auto; }
+
+        /* KHU VỰC TIÊU ĐỀ: Khóa độ cao để các trường thông tin bên dưới luôn thẳng hàng */
+        .header-box {
+            height: 110px; /* Độ cao cố định cho cụm Tên trường + Tên bằng */
+            vertical-align: top;
+            margin-bottom: 10px;
+        }
+
+        .uni-name {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1a3b5c;
+            text-transform: uppercase;
+            margin: 0 0 8px 0;
+            line-height: 1.2;
+        }
+
+        .degree-name {
+            font-size: 21pt; /* Giảm nhẹ cỡ chữ để vừa 1 dòng */
+            font-weight: bold;
+            color: #cc0000;
+            margin: 0;
+            white-space: nowrap; /* CẤM xuống dòng */
+        }
 
         /* Bảng thông tin sinh viên */
         .info-table { width: 100%; border-collapse: collapse; }
-        .info-table td { padding: 7px 0; font-size: 13pt; } /* Tăng padding từ 4.5px lên 7px để các dòng giãn đều ra */
-        .info-label { width: 38%; }
-        .info-value { font-weight: bold; border-bottom: 1px dotted #888; }
+        .info-table td {
+            padding: 8px 0;
+            font-size: 13pt;
+            vertical-align: bottom;
+            line-height: 1.1;
+        }
+        .info-label { width: 40%; color: #333; font-style: italic; text-align: left; }
+        .info-value { font-weight: bold; border-bottom: 1px dotted #888; color: #000; text-align: left; }
+
+        /* Đường kẻ dọc ngăn cách (Màu hex đậm để PDF hiện rõ) */
+        .divider-column { border-left: 1.5px solid #b8860b; }
+
+        .footer-text { font-style: italic; font-size: 11pt; margin: 0 0 5px 0; }
     </style>
 </head>
 <body>
@@ -69,25 +101,31 @@
     <div class="cert-outer-border">
         <div class="cert-inner-border">
 
-            <table class="master-table">
+            <div th:if="${bgBase64 != null}" style="position: absolute; top:0; left:0; right:0; bottom:0; z-index:1; opacity: 0.1;"
+                 th:styleappend="'background-image: url(' + ${bgBase64} + '); background-size: 45%; background-position: center; background-repeat: no-repeat;'">
+            </div>
 
-                <tr style="height: 25mm;">
-                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 5mm 15px 0 0;">
+            <table class="master-table" style="position: relative; z-index: 10;">
+                <tr style="height: 35mm;">
+                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 12mm 15mm 0 15mm;">
                         <p class="title-sm">SOCIALIST REPUBLIC OF VIETNAM</p>
                         <p class="motto">Independence - Freedom - Happiness</p>
+                        <div class="title-deco"></div>
                     </td>
-                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 5mm 0 0 15px;">
+                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 12mm 15mm 0 15mm;">
                         <p class="title-sm">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
                         <p class="motto">Độc lập - Tự do - Hạnh phúc</p>
+                        <div class="title-deco"></div>
                     </td>
                 </tr>
 
                 <tr style="height: 100mm;">
-                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 15mm 20px 0 15px;">
-                        <p class="uni-name" th:text="${universityEn}">NAME OF UNIVERSITY</p>
-                        <p class="degree-name">THE DEGREE OF ENGINEER</p>
-
-                        <table class="info-table" style="text-align: left;">
+                    <td style="text-align: center; vertical-align: top; padding: 5mm 20mm 0 20mm;">
+                        <div class="header-box">
+                            <p class="uni-name" th:text="${universityEn}">NAME OF UNIVERSITY</p>
+                            <p class="degree-name">THE DEGREE OF ENGINEER</p>
+                        </div>
+                        <table class="info-table">
                             <tr><td class="info-label">Major:</td><td class="info-value" th:text="${majorEn}">{MAJOR}</td></tr>
                             <tr><td class="info-label">Full name:</td><td class="info-value" th:text="${fullNameEn}">{FULL NAME}</td></tr>
                             <tr><td class="info-label">Date of birth:</td><td class="info-value" th:text="${dobEn}">{DOB}</td></tr>
@@ -97,11 +135,12 @@
                         </table>
                     </td>
 
-                    <td style="width: 50%; text-align: center; vertical-align: top; padding: 15mm 15px 0 20px; border-left: 1px solid rgba(212,175,55,0.4);">
-                        <p class="uni-name" th:text="${universityVi}">TÊN TRƯỜNG ĐẠI HỌC</p>
-                        <p class="degree-name">BẰNG KỸ SƯ</p>
-
-                        <table class="info-table" style="text-align: left;">
+                    <td class="divider-column" style="text-align: center; vertical-align: top; padding: 5mm 20mm 0 20mm;">
+                        <div class="header-box">
+                            <p class="uni-name" th:text="${universityVi}">TÊN TRƯỜNG ĐẠI HỌC</p>
+                            <p class="degree-name">BẰNG KỸ SƯ</p>
+                        </div>
+                        <table class="info-table">
                             <tr><td class="info-label">Ngành đào tạo:</td><td class="info-value" th:text="${majorVi}">{MAJOR}</td></tr>
                             <tr><td class="info-label">Họ và tên:</td><td class="info-value" th:text="${fullNameVi}">{FULL NAME}</td></tr>
                             <tr><td class="info-label">Ngày sinh:</td><td class="info-value" th:text="${dobVi}">{DOB}</td></tr>
@@ -112,33 +151,28 @@
                     </td>
                 </tr>
 
-                <tr style="height: 55mm;">
-                    <td style="vertical-align: bottom; padding: 0 20px 15mm 15px;">
-                        <p style="font-style: italic; font-size: 11pt; margin: 0 0 5px 0;">Given at: <span th:text="${university}">...</span>, <span th:text="${date}">...</span></p>
-                        <p style="font-size: 11pt; margin: 0 0 10px 0;">
-                            Degree No: <span style="color: #cc0000; font-weight: bold;" th:text="${degreeNo}">12345</span><br>
-                            Reg No: <span th:text="${regNo}">67890</span>
-                        </p>
+                <tr style="height: 59mm;">
+                    <td style="vertical-align: bottom; padding: 0 0 15mm 25mm;">
 
+                        <p style="font-size: 11pt; margin: 0 0 12px 0;">
+                            Degree No: <span style="color: #cc0000; font-weight: bold;" th:text="${degreeNo}">12345</span><br/>
+                            Reg No: <span style="font-weight: bold;" th:text="${regNo}">67890</span>
+                        </p>
                         <table style="width: auto; border-collapse: collapse;">
                             <tr>
-                                <td style="padding: 0;">
-                                    <img th:src="${'data:image/png;base64,' + qrBase64}" style="width: 20mm; height: 20mm; display: block;" alt="QR"/>
-                                </td>
-                                <td style="vertical-align: middle; padding-left: 8px;">
-                                    <span style="color: #28a745; font-size: 9pt; font-weight: bold; line-height: 1.2;">BLOCKCHAIN<br>VERIFIED</span>
+                                <td><img th:src="${'data:image/png;base64,' + qrBase64}" style="width: 17mm; height: 17mm;" alt="QR"/></td>
+                                <td style="vertical-align: middle; padding-left: 10px;">
+                                    <span style="color: #28a745; font-size: 9pt; font-weight: bold; line-height: 1.2;">BLOCKCHAIN<br/>VERIFIED</span>
                                 </td>
                             </tr>
                         </table>
                     </td>
-
-                    <td style="vertical-align: bottom; text-align: center; padding: 0 15px 15mm 20px;">
-                        <p style="font-style: italic; font-size: 12pt; margin: 0 0 5px 0;">Hà Nội, ngày <span th:text="${date}">...</span></p>
-                        <p style="font-weight: bold; font-size: 13pt; margin: 0 0 25mm 0;">HIỆU TRƯỞNG</p>
+                    <td style="vertical-align: bottom; text-align: center; padding: 0 20mm 15mm 0;">
+                        <p class="footer-text">Hà Nội, ngày <span th:text="${date}">...</span></p>
+                        <p style="font-weight: bold; font-size: 13.5pt; margin: 0 0 18mm 0;">HIỆU TRƯỞNG</p>
                         <p style="font-weight: bold; font-size: 14pt; margin: 0;" th:text="${rectorName}">NGUYỄN VĂN A</p>
                     </td>
                 </tr>
-
             </table>
 
         </div>

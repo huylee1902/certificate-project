@@ -1,13 +1,17 @@
 package com.certificate.backend.service;
 
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.IssueRequest;
 import com.certificate.backend.model.dto.Response.IssueResponse;
 import com.certificate.backend.model.entity.CertificateEntity;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.StudentEntity;
+import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.CertificateRepository;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.StudentRepository;
+import com.certificate.backend.utils.HashUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,8 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 
+import java.util.List;
+@Slf4j
 @Service
 public class CertificateService {
     private static final int BLOCKCHAIN_BATCH_LIMIT = 50;
@@ -42,6 +47,54 @@ public class CertificateService {
     @Autowired
     private WalletService walletService;
 
+    @Transactional
+    public void revokeCertificate(Long schoolId, Long studentId, String reason) {
+        log.info("=== BẮT ĐẦU THU HỒI VĂN BẰNG CỦA SINH VIÊN ID: {} ===", studentId);
+
+        // 1. Lấy thông tin sinh viên và trường học
+        StudentEntity student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+
+        SchoolEntity school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        // Kiểm tra xem sinh viên đã được cấp bằng chưa (status == 1)
+        if (student.getStatus() != 1) {
+            throw new AppException(ErrorCode.CERTIFICATE_NOT_AVAILABLE);
+        }
+
+        // 2. Tìm chứng chỉ tương ứng trong DB
+        CertificateEntity certificate = certificateRepository.findByStudentId(studentId)
+                .orElseThrow(() -> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND));
+
+        String degreeNo = certificate.getCertId();
+
+        // 3. Giải mã Private Key của trường (như lúc cấp bằng)
+        String encryptedKey = school.getPrivateKeyEncrypted();
+        String realPrivateKey = walletService.decryptPrivateKey(encryptedKey);
+
+        try {
+
+            String txHash = blockchainService.revokeCertificate(realPrivateKey, degreeNo);
+
+
+            student.setStatus(2);
+            studentRepository.save(student);
+
+            certificate.setRevokedAt(LocalDateTime.now());
+            certificate.setStatus("REVOKED");
+            certificate.setRevokedReason(reason);
+            certificateRepository.save(certificate);
+
+            log.info("=== THU HỒI THÀNH CÔNG VĂN BẰNG: {} ===", degreeNo);
+
+        } catch (Exception e) {
+            log.error("Thu hồi thất bại: ", e);
+            throw new AppException(ErrorCode.REVOKE_FAILED);
+        }
+    }
+
+    // Cấp bằng
     public IssueResponse issueCertificates(Long schoolId, IssueRequest request) {
         IssueResponse resultDto = IssueResponse.builder().build();
 
@@ -85,6 +138,7 @@ public class CertificateService {
         for (ChunkItem item : items) {
             try {
                 byte[] pdfBytes = pdfExportService.generatePdfBytes(item.student, item.degreeNo, item.regNo);
+                item.fileHash = HashUtils.computeSha256(pdfBytes); // băm file pdf vừa sinh ra
                 // Upload IPFS
                 item.ipfsCid = ipfsService.uploadPdf(pdfBytes, item.degreeNo);
                 item.isReadyForBlockchain = true;
@@ -114,6 +168,9 @@ public class CertificateService {
             txHash = blockchainService.issueBatch(walletService.decryptPrivateKey(schoolPrivateKey),degreeNos, studentNames ,studentIds, degreeTypes,majors, ipfsCids);
 
         } catch (Exception e) {
+            e.printStackTrace();
+
+            log.error("[Blockchain] Lỗi ghi chunk: {}", e.getMessage());
             readyItems.forEach(i -> resultDto.addFailure(i.student.getId(), "Lỗi Blockchain: " + e.getMessage()));
             return;
         }
@@ -130,8 +187,10 @@ public class CertificateService {
                         .certId(item.degreeNo)
                         .regNo(item.regNo)
                         .ipfsHash(item.ipfsCid)
+                        .fileHash(item.fileHash)
                         .txHash(txHash)
                         .student(item.student)
+                        .school(item.student.getSchool())
                         .issueDate(LocalDateTime.now())
                         .build();
                 certificateRepository.save(cert);
@@ -161,6 +220,7 @@ public class CertificateService {
         String degreeNo;
         String regNo;
         String ipfsCid;
+        String fileHash;
         boolean isReadyForBlockchain = false;
 
         ChunkItem(StudentEntity student) {

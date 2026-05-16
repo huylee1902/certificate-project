@@ -20,4 +20,6 @@ public interface SchoolRepository extends JpaRepository<SchoolEntity, Long> {
     Optional<SchoolEntity> findByUserId(@Param("userId") Long userId);
 
     Optional<SchoolEntity> findBySchoolId(Long schoolId);
+
+    long countByStatus(SchoolStatus status);
 }

@@ -14,6 +14,7 @@ import org.thymeleaf.context.Context;
 import org.xhtmlrenderer.pdf.ITextRenderer;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -35,7 +36,7 @@ public class PdfExportService {
         Context context = new Context();
 
         // ── 1. THÔNG TIN CHUNG VÀ MÃ XÁC THỰC ────────────────────────
-        context.setVariable("university", "HỌC VIỆN CÔNG NGHỆ BƯU CHÍNH VIỄN THÔNG");
+        context.setVariable("universityEn", translationService.translateSchoolName(student.getSchool().getSchoolName().toUpperCase()) );
         context.setVariable("rectorName", student.getSchool().getRectorName());
         context.setVariable("date", LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         context.setVariable("degreeNo", certId);
@@ -51,7 +52,7 @@ public class PdfExportService {
         context.setVariable("majorVi", student.getMajor().toUpperCase());
         context.setVariable("fullNameVi", student.getFullName().toUpperCase());
         context.setVariable("dobVi", student.getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
-        context.setVariable("gradYearVi", String.valueOf(LocalDate.now().getYear()));
+        context.setVariable("gradYear", String.valueOf(LocalDate.now().getYear()));
         context.setVariable("classificationVi", student.getDegreeType()); // Giả sử entity có trường này
         context.setVariable("modeOfStudyVi", student.getTrainingType());
 
@@ -61,7 +62,7 @@ public class PdfExportService {
         context.setVariable("majorEn", translationService.translateMajor(student.getMajor().toUpperCase()));
         context.setVariable("fullNameEn", translationService.removeAccents(student.getFullName()).toUpperCase());
         context.setVariable("dobEn", translationService.formatDateToEnglish(student.getDob()));
-        context.setVariable("gradYearEn", String.valueOf(LocalDate.now().getYear()));
+        context.setVariable("gradYear", String.valueOf(LocalDate.now().getYear()));
         context.setVariable("classificationEn", translationService.translateDegree(student.getDegreeType()));
         context.setVariable("modeOfStudyEn", translationService.translateTrainingType(student.getTrainingType()));
 

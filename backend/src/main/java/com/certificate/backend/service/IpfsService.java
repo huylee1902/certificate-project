@@ -14,7 +14,6 @@ import java.util.Map;
 @Service
 public class IpfsService {
 
-    // ── Đọc từ application.yml ─────────────────────────────────────────
     @Value("${pinata.jwt}")
     private String pinataJwt;                          // Bearer token từ Pinata dashboard
 
