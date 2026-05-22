@@ -9,7 +9,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.3</version>  <!-- ← Xuống 3.2.x, ổn định và tương thích web3j -->
+        <version>3.2.5</version>  <!-- ← Xuống 3.2.x, ổn định và tương thích web3j -->
         <relativePath/>
     </parent>
 
@@ -145,10 +145,6 @@
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
         <!--thư viện import file -->
         <dependency>
