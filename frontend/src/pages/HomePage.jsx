@@ -354,11 +354,11 @@ const HomePage = () => {
                   key={msg.id} 
                   className={`max-w-[80%] p-3.5 rounded-2xl text-sm font-medium leading-relaxed shadow-sm transition-all ${
                     msg.isBot 
-                      ? 'bg-white text-slate-800 border border-slate-100 rounded-tl-none self-start' 
+                      ? 'bg-white text-slate-800 border border-slate-100 rounded-tl-none self-start whitespace-pre-wrap'  
                       : 'bg-blue-600 text-white rounded-tr-none self-end'
                   }`}
                 >
-                  {msg.text}
+                  {msg.text ? msg.text.replace(/\*\*/g, '') : ''}
                 </div>
               ))}
 
