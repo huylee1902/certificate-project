@@ -364,7 +364,7 @@ const HomePage = () => {
 
               {isBotTyping && (
                 <div className="bg-white border border-slate-100 p-3.5 rounded-2xl rounded-tl-none text-slate-500 text-sm font-medium self-start shadow-sm flex items-center gap-1.5 animate-pulse">
-                  <span>Trợ lý AI đang gõ</span>
+                  <span>AI chatbot đang gõ</span>
                   <span className="flex gap-0.5 mt-1">
                     <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
                     <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
