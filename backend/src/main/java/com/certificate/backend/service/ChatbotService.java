@@ -36,7 +36,11 @@ public class ChatbotService {
             + "Hãy dựa vào các thông tin sau để trả lời người dùng ngắn gọn bằng tiếng Việt:\n"
             + "1. Công nghệ: FE ReactJS, BE Java Spring Boot, DB MySQL, mạng lưới IPFS lưu file văn bằng, Smart Contract Solidity chống làm giả.\n"
             + "2. Chức năng: Tra cứu văn bằng; Xác thực file PDF qua mã Hash; Đăng ký tài khoản trường đại học; AI Chatbot giải đáp thắc mắc.\n"
-            + "Hãy trả lời thân thiện, ngắn gọn. Câu hỏi của người dùng: " + userMessage;
+            + "QUY TẮC ĐỊNH DẠNG BẮT BUỘC:\n"
+            + "- Tuyệt đối KHÔNG viết câu trả lời thành một khối văn bản dài dày đặc.\n"
+            + "- Phải chủ động sử dụng dấu xuống dòng để phân tách các ý lớn.\n"
+            + "- Sử dụng các ký tự đầu dòng như (1., 2., hoặc dấu -) để làm danh sách liệt kê rõ ràng, dễ nhìn.\n"
+            + "Câu hỏi của người dùng: " + userMessage;
 
             // Đóng gói cấu trúc JSON chuẩn theo quy định của Google API v1
             Map<String, Object> textMap = new HashMap<>();
