@@ -50,7 +50,8 @@ public class SecurityConfig {
                                 "/api/auth/register",
                                 "/api/auth/refresh",
                                 "/api/certificates/verify/**",
-                                "/api/certificates/search"
+                                "/api/certificates/search",
+                                "/api/chat/**"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/schools/*/approve",
