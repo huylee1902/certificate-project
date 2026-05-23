@@ -21,10 +21,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 public class CertificateService {
-    private static final int BLOCKCHAIN_BATCH_LIMIT = 50;
+    private static final int BLOCKCHAIN_BATCH_LIMIT = 20;
 
     @Autowired
     private StudentRepository studentRepository;
@@ -46,6 +48,8 @@ public class CertificateService {
 
     @Autowired
     private WalletService walletService;
+    @Autowired
+    private AuditLogService auditLogService;
 
     @Transactional
     public void revokeCertificate(Long schoolId, Long studentId, String reason) {
@@ -84,6 +88,7 @@ public class CertificateService {
             certificate.setRevokedAt(LocalDateTime.now());
             certificate.setStatus("REVOKED");
             certificate.setRevokedReason(reason);
+            auditLogService.logAction(schoolId,"Thu hồi văn bằng","Thu hồi văn bằng "+degreeNo+"- Lý do: "+ reason,school.getSchoolCode());
             certificateRepository.save(certificate);
 
             log.info("=== THU HỒI THÀNH CÔNG VĂN BẰNG: {} ===", degreeNo);
@@ -96,6 +101,13 @@ public class CertificateService {
 
     // Cấp bằng
     public IssueResponse issueCertificates(Long schoolId, IssueRequest request) {
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        // Lưu ý: Đổi getPrincipalName() thành getter tương ứng trong SchoolEntity của bạn (VD: getRectorName())
+        if (school.getRectorName() == null || school.getRectorName().trim().isEmpty()) {
+            throw new AppException(ErrorCode.PROFILE_INCOMPLETE);
+        }
         IssueResponse resultDto = IssueResponse.builder().build();
 
         List<StudentEntity> allStudents = studentRepository.findAllById(request.getStudentIds());
@@ -162,7 +174,7 @@ public class CertificateService {
             List<String> ipfsCids = readyItems.stream().map(i -> i.ipfsCid).toList();
 
             SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy trường"));
+                    .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
             String schoolPrivateKey = school.getPrivateKeyEncrypted();
             txHash = blockchainService.issueBatch(walletService.decryptPrivateKey(schoolPrivateKey),degreeNos, studentNames ,studentIds, degreeTypes,majors, ipfsCids);
@@ -175,11 +187,12 @@ public class CertificateService {
             return;
         }
 
-        saveChunkToDatabase(readyItems, txHash, resultDto);
+        saveChunkToDatabase(schoolId,readyItems, txHash, resultDto);
     }
 
     @Transactional
-    protected void saveChunkToDatabase(List<ChunkItem> items, String txHash, IssueResponse resultDto) {
+    protected void saveChunkToDatabase(Long schoolId,List<ChunkItem> items, String txHash, IssueResponse resultDto) {
+
         for (ChunkItem item : items) {
             try {
                 // Lưu vào bảng Chứng chỉ
@@ -199,11 +212,19 @@ public class CertificateService {
                 studentRepository.save(item.student);
 
                 // Ghi nhận thành công
+
                 resultDto.addSuccess(item.student.getId(), item.degreeNo, item.ipfsCid, txHash);
             } catch (Exception e) {
                 resultDto.addFailure(item.student.getId(), "Lỗi lưu DB: " + e.getMessage());
             }
         }
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        auditLogService.logAction(
+                items.get(0).student.getSchool().getSchoolId(),
+                "Cấp bằng",
+                "Cấp bằng thành công cho "+resultDto.getSuccessCount()+" sinh viên",school.getSchoolCode());
     }
 
     private <T> List<List<T>> partitionIntoChunks(List<T> list, int chunkSize) {

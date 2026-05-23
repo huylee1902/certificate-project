@@ -8,6 +8,15 @@ public class SearchResponse {
     private String classification;
     private String status;
     private String ipfsUrl;
+    private String reasonRevoked;
+
+    public String getReasonRevoked() {
+        return reasonRevoked;
+    }
+
+    public void setReasonRevoked(String reasonRevoked) {
+        this.reasonRevoked = reasonRevoked;
+    }
 
     public String getStudentName() {
         return studentName;

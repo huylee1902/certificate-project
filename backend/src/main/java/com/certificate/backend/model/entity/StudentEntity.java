@@ -23,6 +23,9 @@ public class StudentEntity {
     private String fullName;
 
     @Column(nullable = false)
+    private String email;
+
+    @Column(nullable = false)
     private LocalDate dob;
 
     @Column(length = 100)

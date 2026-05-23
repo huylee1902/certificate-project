@@ -3,35 +3,40 @@ package com.certificate.backend.controller;
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.ImportResultDto;
+import com.certificate.backend.model.dto.Response.PageResponseDto;
+import com.certificate.backend.model.dto.Response.StudentResponseDto;
 import com.certificate.backend.model.enums.ErrorCode;
-import com.certificate.backend.security.JwtPrincipal;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.security.SecurityUserDetail;
+import com.certificate.backend.service.AuditLogService;
 import com.certificate.backend.service.ImportStudentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.certificate.backend.service.StudentService;
+
+import java.security.Principal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/students")
-public class StudentImportController {
+public class StudentController {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
     @Autowired
     private ImportStudentService importStudentService;
+    @Autowired
+    private StudentService studentService;
 
     @PostMapping("/import")
     public ApiResponse<ImportResultDto> importStudents(
             @RequestParam("file") MultipartFile file,
-            @AuthenticationPrincipal JwtPrincipal principal) throws Exception {
-
-        validateFile(file); // Ném AppException nếu file không hợp lệ
-        ImportResultDto result = importStudentService.importStudents(file, principal.getSchoolId());
-
+            @AuthenticationPrincipal SecurityUserDetail currentUser) throws Exception {
+        Long schoolId = currentUser.schoolId();
+        validateFile(file);
+        ImportResultDto result = importStudentService.importStudents(file, schoolId);
         return ApiResponse.success(
                 result,
                 "Import thành công " + result.getSuccessCount() + " sinh viên vào hệ thống."
@@ -51,5 +56,18 @@ public class StudentImportController {
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new AppException(ErrorCode.FILE_INVALID_FORMAT, "File không được vượt quá 5MB");
         }
+    }
+
+    @GetMapping
+    public ApiResponse<?> getStudents(
+            Principal principal,
+            @RequestParam(value = "page",defaultValue = "0") int page,
+            @RequestParam(value = "size",defaultValue = "50") int size,
+            @RequestParam(value = "search",required = false, defaultValue = "") String search,
+            @RequestParam(value = "major", required = false) String major,
+            @RequestParam(value = "status",required = false, defaultValue = "all") String status){
+        String username = principal.getName();
+        PageResponseDto<StudentResponseDto> data = studentService.getStudents(username,page, size, search,major, status);
+        return ApiResponse.success(data);
     }
 }

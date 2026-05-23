@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mã Xác Nhận CertiChain</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fe; margin: 0; padding: 40px 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .header { background: #0f172a; padding: 30px 40px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px; }
+        .content { padding: 40px; color: #334155; line-height: 1.6; }
+        .otp-box { background: #eff6ff; border: 1px dashed #3b82f6; border-radius: 12px; padding: 20px; text-align: center; margin: 30px 0; }
+        .otp-code { font-size: 32px; font-weight: 800; color: #2563eb; letter-spacing: 5px; margin: 0; }
+        .warning { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px 20px; border-radius: 4px; font-size: 14px; color: #92400e; margin-bottom: 20px; }
+        .footer { background: #f8fafc; padding: 20px 40px; text-align: center; font-size: 13px; color: #64748b; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>CERTICHAIN PORTAL</h1>
+    </div>
+    <div class="content">
+        <p>Xin chào,</p>
+        <p>Hệ thống CertiChain vừa nhận được một yêu cầu <strong>thay đổi địa chỉ Email</strong> liên kết với tài khoản quản lý nhà trường của bạn.</p>
+
+        <div class="otp-box">
+            <p style="margin-top: 0; font-size: 14px; color: #64748b; text-transform: uppercase; font-weight: 600;">Mã xác nhận bảo mật (OTP) của bạn là</p>
+            <p class="otp-code" th:text="${otpCode}">123456</p>
+        </div>
+
+        <div class="warning">
+            <strong>Lưu ý quan trọng:</strong> Mã này có hiệu lực trong vòng <strong>3 phút</strong>. Tuyệt đối không chia sẻ mã này cho bất kỳ ai, kể cả nhân viên hỗ trợ của CertiChain.
+        </div>
+
+        <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này và tiến hành đổi mật khẩu ngay lập tức để bảo vệ tài khoản.</p>
+        <p>Trân trọng,<br><strong>Đội ngũ Bảo mật CertiChain</strong></p>
+    </div>
+    <div class="footer">
+        © 2026 CertiChain System. All rights reserved.<br>
+        Hệ thống Quản lý Văn bằng Blockchain minh bạch và an toàn.
+    </div>
+</div>
+</body>
+</html>

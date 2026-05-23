@@ -4,7 +4,10 @@ import com.certificate.backend.model.dto.Request.IssueRequest;
 import com.certificate.backend.model.dto.Request.RevokeRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.IssueResponse;
-import com.certificate.backend.security.JwtPrincipal;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.security.SecurityUserDetail;
+import com.certificate.backend.service.AuditLogService;
 import com.certificate.backend.service.CertificateService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,13 +22,15 @@ public class CertificateController {
     @Autowired
     private CertificateService certificateService;
 
+
     @PostMapping("/issue")
     public ApiResponse<IssueResponse> issueCertificates(
-            @AuthenticationPrincipal JwtPrincipal principal,
+            @AuthenticationPrincipal SecurityUserDetail currentUser,
             @Valid @RequestBody IssueRequest request) {
 
+        Long schoolId = currentUser.schoolId();
         IssueResponse result = certificateService.issueCertificates(
-                principal.getSchoolId(), request);
+                schoolId, request);
 
         String message;
         if (result.getFailureCount() == 0) {
@@ -41,12 +46,13 @@ public class CertificateController {
 
     @PostMapping("/revoke/{studentId}")
     public ApiResponse<?> revokeCertificate(
-            @AuthenticationPrincipal JwtPrincipal principal,
+            @AuthenticationPrincipal SecurityUserDetail currentUser,
             @PathVariable Long studentId,
             @Valid @RequestBody RevokeRequest request) {
 
+        Long schoolId = currentUser.schoolId();
         certificateService.revokeCertificate(
-                principal.getSchoolId(), studentId, request.getReason());
+                schoolId, studentId, request.getReason());
 
         return ApiResponse.success(null, "Đã thu hồi văn bằng thành công!");
     }

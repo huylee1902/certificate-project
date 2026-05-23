@@ -14,6 +14,7 @@ import org.web3j.protocol.http.HttpService;
 import org.web3j.tuples.generated.Tuple12;
 import org.web3j.tx.Transfer;
 import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.StaticGasProvider;
 import org.web3j.utils.Convert;
 
 import java.math.BigDecimal;
@@ -120,12 +121,17 @@ public class BlockchainService {
             List<String> majors,
             List<String> ipfsHashes
     ) {
+        // Đặt Gas Price (ví dụ 20 Gwei) và Gas Limit cực cao (10 triệu)
+        BigInteger GAS_PRICE = BigInteger.valueOf(20_000_000_000L);
+        BigInteger GAS_LIMIT = BigInteger.valueOf(10_000_000L); // TĂNG SỐ NÀY LÊN
+
+        StaticGasProvider gasProvider = new StaticGasProvider(GAS_PRICE, GAS_LIMIT);
         try {
             // TẠO CREDENTIALS BẰNG PRIVATE KEY CỦA TRƯỜNG, KHÔNG PHẢI CỦA ADMIN
             Credentials schoolCredentials = Credentials.create(schoolPrivateKey);
 
             CertificateRegistry registry = CertificateRegistry.load(
-                    contractAddress, web3j, schoolCredentials, new DefaultGasProvider()
+                    contractAddress, web3j, schoolCredentials,gasProvider
             );
 
             // Gọi hàm issueCertificateBatch trong Smart Contract của bạn

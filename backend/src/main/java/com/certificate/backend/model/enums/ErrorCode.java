@@ -12,15 +12,20 @@ public enum ErrorCode {
     FILE_PARSE_ERROR(400, "Không thể đọc file Excel"),
     INVALID_SCHOOL_STATUS(400, "Thao tác không hợp lệ với trạng thái hiện tại của trường học"),
     SCHOOLCODE_EXIST(400,"Mã trường đã tồn tại!"),
+    EMAIL_EXIST(400,"Email đã tồn tại!"),
     USERNAME_EXIST(400,"Tên đăng nhập hoặc email đã tồn tại!"),
     ACCOUNT_ALREADY_ACTIVATED(400, "Tài khoản này đã được kích hoạt thành công từ trước. Vui lòng đăng nhập."),
     TOKEN_INVALID(400, "Đường dẫn không hợp lệ hoặc tài khoản đã được kích hoạt trước đó."),
     TOKEN_EXPIRED(400, "Đường dẫn xác thực đã hết hạn (Quá 24 giờ). Vui lòng yêu cầu cấp lại."),
-
+    PROFILE_INCOMPLETE(400, "Hồ sơ chưa hoàn thiện. Vui lòng cập nhật tên Hiệu trưởng trước khi cấp bằng!"),
+    PASSWORD_MISMATCH(400, "Mật khẩu xác nhận mới không trùng khớp"),
 
     INVALID_USERNAME(401,"Tên đăng nhập hoặc email không chính xác!"),
     INVALID_REFRESH_TOKEN(401, "Refresh Token không hợp lệ"),
     REFRESH_TOKEN_EXPIRED(401, "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"),
+    OTP_EXPIRED(401,"Mã OTP đã hết hạn hoặc chưa được gửi"),
+    OTP_INVALID(401,"Mã OTP không chính xác"),
+    PASSWORD_INVALID(401,"Mật khẩu không chính xác!"),
 
 
     ACCOUNT_PENDING(403, "Tài khoản đang chờ duyệt! Vui lòng liên hệ quản trị viên"),

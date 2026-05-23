@@ -1,6 +1,7 @@
 package com.certificate.backend.model.dto.Request;
 
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -10,6 +11,10 @@ public class StudentDto {
 
     @NotBlank(message = "Họ và tên không được để trống")
     private String fullName;
+
+    @NotBlank(message = "Email không được để trống")
+    @Email(message = "Email không đúng định dạng")
+    private String email;
 
     @NotBlank(message = "Ngày sinh không được để trống")
     @Pattern(regexp = "^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[012])/\\d{4}$",
@@ -35,6 +40,14 @@ public class StudentDto {
 
     public String getDob() {
         return dob;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getMajor() {

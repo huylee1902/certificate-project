@@ -50,21 +50,32 @@ public class SecurityConfig {
                                 "/api/auth/register",
                                 "/api/auth/refresh",
                                 "/api/certificates/verify/**",
-                                "/api/certificates/search"
+                                "/api/certificates/search",
+                                "/api/auth/forgot-password",
+                                "/api/auth/forgot-password/verify",
+                                "/api/auth/forgot-password/reset",
+                                "/api/auth/verify-otp",
+                                "/api/certificates/scan"
                         ).permitAll()
                         .requestMatchers(
-                                "/api/schools/*/approve",
-                                "/api/schools/*/reject",
-                                "/api/schools/*/suspend",
-                                "/api/schools/*/reinstate"
-                        ).hasAuthority("ADMIN")
+                                "/api/admin/*/approve",
+                                "/api/admin/*/reject",
+                                "/api/admin/*/suspend",
+                                "/api/admin/*/reinstate",
+                                "/api/admin/dashboard-stats",
+                                "/api/admin/schools",
+                                "/api/admin/schools/*/analytics",
+                                "/api/admin/profile"
+                        ).hasRole("ADMIN")
 
 
                         .requestMatchers(
-                                "/api/schools/certificates/issue",
-                                "/api/schools/certificates/revoke/*"
+                                "/api/students/import",
+                                "/api/certificates/issue",
+                                "/api/certificates/revoke/*",
+                                "/api/school/dashboard"
                         )
-                        .hasAuthority("SCHOOL")
+                        .hasRole("SCHOOL")
 
                         // Tất cả endpoint còn lại BẮT BUỘC phải có token hợp lệ
                         .anyRequest().authenticated()
@@ -83,7 +94,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173")); // Port của React
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
