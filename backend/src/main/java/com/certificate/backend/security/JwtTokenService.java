@@ -33,16 +33,14 @@ public class JwtTokenService {
 
     // ── Tạo Access Token ──
     public String generateAccessToken(UserEntity user) {
-        JwtBuilder builder = Jwts.builder()
-                            .subject(user.getUserName())
-                            .claim("type", "access")
-                            .claim("role",user.getRole())
-                            .issuedAt(new Date())
-                            .expiration(new Date(System.currentTimeMillis() + accessExpiration));
-        if (user.getSchool() != null) {
-            builder.claim("schoolId", user.getSchool().getSchoolId());
-        }
-        return builder.signWith(signingKey).compact();
+        return Jwts.builder()
+                .subject(user.getUserName())
+                .claim("type", "access")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + accessExpiration))
+                .signWith(signingKey)
+                .compact();
+
     }
 
     public String generateRefreshToken() {
@@ -61,6 +59,7 @@ public class JwtTokenService {
             return "access".equals(claims.get("type")) && claims.getExpiration().after(new Date());
         } catch (ExpiredJwtException e) {
             System.err.println("Token đã hết hạn: " + e.getMessage());
+            throw e;
         } catch (JwtException | IllegalArgumentException e) {
             System.err.println("Token không hợp lệ: " + e.getMessage());
         }
@@ -69,14 +68,6 @@ public class JwtTokenService {
 
     public String getUsernameFromToken(String token) {
         return parseClaims(token).getSubject();
-    }
-    public List<GrantedAuthority> getRolesFromToken(String token) {
-        Claims claims = parseClaims(token);
-        String role = claims.get("role", String.class);
-        return List.of(new SimpleGrantedAuthority(role));
-    }
-    public Long getSchoolIdFromToken(String token){
-        return parseClaims(token).get("schoolId", Long.class);
     }
 
     private Claims parseClaims(String token) {

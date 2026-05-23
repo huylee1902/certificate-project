@@ -29,7 +29,6 @@ public class VerifyService {
     @Value("${pinata.gateway.url}")
     private String ipfsGatewayUrl;
 
-
     public SearchResponse search(SearchRequest req){
         CertificateEntity certificate = certificateRepository.findByCertId(req.getCertId())
                 .orElseThrow(()-> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND));
@@ -43,7 +42,9 @@ public class VerifyService {
         if (!inputName.equals(dbName) && !req.getDob().equals(dbDob)){
             throw new AppException(ErrorCode.CERTIFICATE_NOT_FOUND);
         }
-        return searchBlockchain(certificate.getCertId(), student, dbDob);
+
+        // Truyền thẳng đối tượng CertificateEntity thay vì chỉ truyền certId
+        return searchBlockchain(certificate, student, dbDob);
     }
 
     public SearchResponse verify(MultipartFile file) {
@@ -59,8 +60,8 @@ public class VerifyService {
                     .orElseThrow(() -> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND,
                             "CẢNH BÁO: File văn bằng này là GIẢ MẠO hoặc ĐÃ BỊ CHỈNH SỬA!"));
 
-            // 4. Nếu tìm thấy (Hash trùng khớp 100%), lấy certId chọc lên Blockchain
-            return searchBlockchain(certInDb.getCertId(), certInDb.getStudent(),
+            // 4. Truyền thẳng đối tượng certInDb vào hàm xử lý
+            return searchBlockchain(certInDb, certInDb.getStudent(),
                     certInDb.getStudent().getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
 
         } catch (AppException e) {
@@ -71,14 +72,27 @@ public class VerifyService {
         }
     }
 
+    public SearchResponse scan(String certId) {
+        CertificateEntity certificate = certificateRepository.findByCertId(certId)
+                .orElseThrow(() -> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND));
+
+        StudentEntity student = certificate.getStudent();
+        String dobStr = student.getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
+        // Tái dụng luôn hàm searchBlockchain có sẵn
+        return searchBlockchain(certificate, student, dobStr);
+    }
+
     // Hàm phụ trợ chống lỗi NullPointerException (NPE)
     private String getSafeString(Map<String, Object> map, String key) {
         Object value = map.get(key);
-        return value != null ? value.toString() : ""; // Nếu null thì trả về chuỗi rỗng thay vì báo lỗi
+        return value != null ? value.toString() : "";
     }
 
-    private SearchResponse searchBlockchain(String certId, StudentEntity student, String dobStr){
-        var blockchainInfo = blockchainService.getCertificate(certId);
+    // Đổi tham số đầu tiên từ String certId -> CertificateEntity certificate
+    private SearchResponse searchBlockchain(CertificateEntity certificate, StudentEntity student, String dobStr){
+        // Lấy thông tin từ Smart Contract thông qua certId
+        var blockchainInfo = blockchainService.getCertificate(certificate.getCertId());
 
         if (blockchainInfo == null) {
             throw new AppException(ErrorCode.CERTIFICATE_NOT_FOUND, "Bằng không tồn tại trên Blockchain!");
@@ -90,16 +104,19 @@ public class VerifyService {
         res.setDob(dobStr);
         res.setClassification(getSafeString(blockchainInfo, "degreeType"));
 
-        // KIỂM TRA TRẠNG THÁI: Tùy theo key bạn lưu ở BlockchainService (isRevoked hay isValid)
+        // KIỂM TRA TRẠNG THÁI TỪ BLOCKCHAIN
         boolean isRevoked = (Boolean) blockchainInfo.get("isRevoked");
         res.setStatus(isRevoked ? "REVOKED" : "VALID");
+
         if(!isRevoked){
             String ipfsHash = getSafeString(blockchainInfo, "ipfsHash");
             String gateway = ipfsGatewayUrl.endsWith("/") ? ipfsGatewayUrl : ipfsGatewayUrl + "/";
             res.setIpfsUrl(gateway + ipfsHash);
+        } else {
+            // Lấy lý do thu hồi từ Database và gán vào Response DTO
+            res.setReasonRevoked(certificate.getRevokedReason());
         }
 
         return res;
     }
-
 }

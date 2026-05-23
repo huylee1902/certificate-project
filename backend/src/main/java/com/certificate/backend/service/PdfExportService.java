@@ -6,6 +6,7 @@ import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.lowagie.text.pdf.BaseFont;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
@@ -28,8 +29,8 @@ public class PdfExportService {
     @Autowired
     private TranslationService translationService;
 
-    // TODO: Thay bằng link Ngrok thực tế của bạn khi chạy (ví dụ: ngrok http 3000)
-    private final String NGROK_BASE_URL = "https://abcd-1234.ngrok-free.app";
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     // Truyền thêm degreeNo và regNo từ hàm Cấp Bằng vào đây
     public byte[] generatePdfBytes(StudentEntity student, String certId, String regNo) throws Exception {
@@ -43,7 +44,7 @@ public class PdfExportService {
         context.setVariable("regNo", regNo);
 
         // Tạo QR Code dẫn tới link Ngrok
-        String verifyUrl = NGROK_BASE_URL + "/verify?degreeNo=" + certId;
+        String verifyUrl = baseUrl + "/?certId=" + certId;
         context.setVariable("qrBase64", generateQRCodeBase64(verifyUrl));
 
 

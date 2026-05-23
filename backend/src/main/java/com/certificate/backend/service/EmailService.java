@@ -57,4 +57,35 @@ public class EmailService {
             System.err.println("Lỗi khi gửi email đến " + to + ": " + e.getMessage());
         }
     }
+
+    @Async // Vẫn chạy ngầm để Frontend không bị chờ lâu
+    public void sendOtpEmail(String to, String otpCode) {
+        try {
+            // 1. Truyền mã OTP vào file HTML
+            Context context = new Context();
+            context.setVariable("otpCode", otpCode);
+
+            // 2. Render file "email-otp.html" (chúng ta sẽ tạo file này ở bước 2)
+            String htmlBody = templateEngine.process("email-otp", context);
+
+            // 3. Khởi tạo đối tượng Thư
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            // Cấu hình người gửi
+            helper.setFrom(systemEmail, "CertiChain Security");
+
+            // Cấu hình người nhận và tiêu đề
+            helper.setTo(to);
+            helper.setSubject("Mã xác nhận bảo mật - Đổi Email hệ thống");
+            helper.setText(htmlBody, true); // true = HTML format
+
+            // Ra lệnh gửi
+            mailSender.send(message);
+            System.out.println("Đã gửi email OTP thành công tới: " + to);
+
+        } catch (MessagingException | UnsupportedEncodingException e) {
+            System.err.println("Lỗi khi gửi email OTP đến " + to + ": " + e.getMessage());
+        }
+    }
 }

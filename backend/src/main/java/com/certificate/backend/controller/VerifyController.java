@@ -1,5 +1,6 @@
 package com.certificate.backend.controller;
 
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.SearchRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.SearchResponse;
@@ -34,5 +35,14 @@ public class VerifyController {
             return ApiResponse.success(400,"Xác thực thất bại!");
         }
         return ApiResponse.success(res,"Xác thực thành công!");
+    }
+
+    @GetMapping("/scan")
+    public ApiResponse<?> scanCertificate(@RequestParam String certId) {
+        SearchResponse res = verifyService.scan(certId.trim());
+        if (res == null) {
+            return ApiResponse.error(404, "Không tìm thấy văn bằng!");
+        }
+        return ApiResponse.success(res, "Xác thực thành công!");
     }
 }

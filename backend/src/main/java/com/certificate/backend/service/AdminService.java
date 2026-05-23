@@ -2,12 +2,9 @@ package com.certificate.backend.service;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.SchoolEntity;
-import com.certificate.backend.model.entity.UserEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.model.enums.SchoolStatus;
 import com.certificate.backend.repository.SchoolRepository;
-import com.certificate.backend.repository.UserRepository;
-import com.certificate.backend.security.TokenBlacklistService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,18 +25,16 @@ public class AdminService {
     private BlockchainService blockchainService;
     @Autowired
     private EmailService emailService;
-
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
+    private AuditLogService auditLogService;
+
 
     @Transactional
     public void approveSchool(Long schoolId) {
 
-        // Lấy thông tin trường
         SchoolEntity school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
-        // Chỉ duyệt được trường đang PENDING
         if (school.getStatus() != SchoolStatus.PENDING) {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS,
                     "Trường không ở trạng thái chờ duyệt! Trạng thái hiện tại: "
@@ -51,7 +46,6 @@ public class AdminService {
 
         blockchainService.fundSchoolWallet(wallet.getWalletAddress(), "20.0");
 
-        // Cấp quyền trên Smart Contract
         blockchainService.authorizeSchool(
                 wallet.getWalletAddress(),
                 school.getSchoolName(),
@@ -63,18 +57,18 @@ public class AdminService {
         String token = java.util.UUID.randomUUID().toString();
         school.getUser().setActiveToken(token);
         school.getUser().setActiveTokenExpiry(LocalDateTime.now().plusHours(24));
-        school.getUser().setActive(false);          // Chưa click link mail thì chưa cho login
+        school.getUser().setActive(false);
 
-        // --- GỌI EMAIL SERVICE GỌN GÀNG ---
         String activationLink = "http://localhost:5173/activate?token=" + token;
 
         emailService.sendActivationEmail(
-                school.getUser().getEmail(), // Lấy email của trường
+                school.getUser().getEmail(),
                 "Xác thực & Kích hoạt tài khoản Hệ thống Văn bằng",
                 school.getSchoolName(),
                 activationLink
         );
         school.setStatus(SchoolStatus.APPROVED);
+        auditLogService.logAction(schoolId,"Duyệt tài khoản","Admin đã duyệt tài khoản tổ chức","System Admin");
         schoolRepository.save(school);
 
     }
@@ -89,9 +83,6 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ từ chối được trường đang PENDING!");
         }
 
-
-        // Từ chối chỉ cập nhật DB, không cần gọi blockchain
-        // Vì trường chưa được authorize nên không có gì trên blockchain
         school.setStatus(SchoolStatus.REJECTED);
         schoolRepository.save(school);
     }
@@ -106,13 +97,10 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ khóa được trường đang APPROVED!");
         }
 
-        // ── Bước 1: Gọi smart contract suspendSchool ──
         blockchainService.suspendSchool(school.getWalletAddress());
 
-        UserEntity user = school.getUser();
-        tokenBlacklistService.blacklistUser(user.getUserName(), 1800000);
-        // ── Bước 2: Cập nhật DB ───────────────────────
         school.setStatus(SchoolStatus.SUSPENDED);
+        auditLogService.logAction(schoolId,"Khóa tài khoản","Admin đã khóa tài khoản tổ chức!","System Admin");
         schoolRepository.save(school);
     }
 
@@ -126,10 +114,10 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chỉ mở khóa được trường đang SUSPENDED!");
         }
 
-        // Gọi smart contract reinstateSchool
         blockchainService.reinstateSchool(school.getWalletAddress());
 
         school.setStatus(SchoolStatus.APPROVED);
+        auditLogService.logAction(schoolId,"Mở khóa","Admin đã khóa tài khoản tổ chức!","System Admin");
         schoolRepository.save(school);
 
     }

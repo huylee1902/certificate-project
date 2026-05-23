@@ -1,4 +1,4 @@
-package com.certificate.backend.model.dto;
+package com.certificate.backend.model.dto.Response;
 
 public class AuthInfoModel {
     private String accessToken;     // dùng để gọi API
@@ -23,7 +23,7 @@ public class AuthInfoModel {
         return refreshToken;
     }
 
-    public String getUsername() {
+    public String getUserName() {
         return username;
     }
 
@@ -43,7 +43,7 @@ public class AuthInfoModel {
         this.refreshToken = refreshToken;
     }
 
-    public void setUsername(String username) {
+    public void setUserName(String username) {
         this.username = username;
     }
 

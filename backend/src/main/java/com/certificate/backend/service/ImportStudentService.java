@@ -33,6 +33,8 @@ public class ImportStudentService {
 
     @Autowired
     private SchoolRepository schoolRepository;
+    @Autowired
+    private AuditLogService auditLogService;
 
     @Autowired
     private Validator validator;
@@ -94,6 +96,7 @@ public class ImportStudentService {
         studentRepository.saveAll(validEntities);
 
         ImportResultDto importResultDto = new ImportResultDto(dtoList.size(),validEntities.size(),rowErrors);
+        auditLogService.logAction(schoolId,"Thêm sinh viên","Thêm thành công"+importResultDto.getSuccessCount()+" sinh viên vào hệ thống",school.getSchoolCode());
         return importResultDto;
 
     }
@@ -115,6 +118,7 @@ public class ImportStudentService {
                 dto.setMajor(getCellValue(row.getCell(4), formatter));
                 dto.setDegreeType(getCellValue(row.getCell(5), formatter));
                 dto.setTrainingType(getCellValue(row.getCell(6), formatter));
+                dto.setEmail(getCellValue(row.getCell(7), formatter));
                 result.add(dto);
             }
             return result;
@@ -132,6 +136,7 @@ public class ImportStudentService {
         entity.setMajor(dto.getMajor());
         entity.setDegreeType(dto.getDegreeType());
         entity.setTrainingType(dto.getTrainingType());
+        entity.setEmail(dto.getEmail());
         entity.setSchool(school);
         return entity;
     }

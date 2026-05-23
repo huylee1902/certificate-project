@@ -1,5 +1,6 @@
 package com.certificate.backend.security;
 
+import com.certificate.backend.model.enums.SchoolStatus;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
@@ -26,12 +27,10 @@ public class JwtFilter extends OncePerRequestFilter {
     private JwtTokenService jwtTokenService;
 
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
-
-
+    private SecurityUserDetailsService userDetailsService;
 
     private String parseJwtToken(HttpServletRequest request){
-        // Tách token từ header request
+
         final String authHeader = request.getHeader("Authorization");
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7);
@@ -64,52 +63,45 @@ public class JwtFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 2. Token đã bị Blacklist (Đăng xuất)
-            if (tokenBlacklistService.isTokenBlacklisted(token)) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setCharacterEncoding("UTF-8");
-                response.getWriter().write("Token này đã bị đăng xuất/thu hồi!");
-                return;
-            }
 
-            // 3. Giải mã và kiểm tra Token
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 // Nếu validateToken ném lỗi, nó sẽ nhảy thẳng xuống block catch bên dưới
                 if (jwtTokenService.validateToken(token)) {
                     String username = jwtTokenService.getUsernameFromToken(token);
 
-                    // 4. Kiểm tra tài khoản bị khóa
-                    if (username != null && tokenBlacklistService.isUserSuspended(username)) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN); // 403
-                        response.setCharacterEncoding("UTF-8");
-                        response.getWriter().write("Tài khoản của bạn đã bị Admin khóa!");
-                        return;
-                    }
-
-                    // 5. Cấp quyền thành công
                     if (username != null) {
-                        Long schoolId = jwtTokenService.getSchoolIdFromToken(token);
-                        List<GrantedAuthority> authorities = jwtTokenService.getRolesFromToken(token);
-                        JwtPrincipal principal = new JwtPrincipal(username, schoolId);
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                        SecurityUserDetail myUser = (SecurityUserDetail) userDetails;
+                        if(myUser.getSchool()!= null){
+                            if (myUser.getUser().getSchool().getStatus() == SchoolStatus.SUSPENDED) {
+                                SecurityContextHolder.clearContext();
+                                response.setStatus(HttpServletResponse.SC_FORBIDDEN); // 403 Đá văng
+                                response.setContentType("application/json;charset=UTF-8");
+                                response.getWriter().write("{\"code\": 403, \"message\": \"Tài khoản của bạn đã bị Admin khóa!\"}");
+                                return;
+                            }
+                        }
+
                         UsernamePasswordAuthenticationToken authToken =
-                                new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                                new UsernamePasswordAuthenticationToken(myUser, null, myUser.getAuthorities());
                         SecurityContextHolder.getContext().setAuthentication(authToken);
                     }
                 }
             }
-        } catch (ExpiredJwtException | SignatureException | MalformedJwtException e) {
-            // BẮT LỖI TỪ THƯ VIỆN JWT: Đừng return 401 ở đây!
-            // Cứ xóa Context (để đảm bảo an toàn) rồi cho request đi qua.
-            // Nếu họ đang gọi API Login -> Vẫn login bình thường.
-            // Nếu họ gọi API cần quyền -> Spring Security (AuthenticationEntryPoint) sẽ tự văng lỗi 401 thay cho bạn.
-            SecurityContextHolder.clearContext();
 
-            // System.out.println("Cảnh báo: Token hết hạn hoặc không hợp lệ: " + e.getMessage());
-        } catch (Exception e) {
+            filterChain.doFilter(request, response);
+
+        } catch (ExpiredJwtException e) {
             SecurityContextHolder.clearContext();
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setHeader("Access-Control-Allow-Origin", request.getHeader("Origin"));
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\": 401, \"message\": \"Access Token đã hết hạn\"}");
+            return; // QUAN TRỌNG: Phải return để ngắt luồng, không cho đi tiếp xuống FilterChain
+
         }
 
-        // Cho phép request tiếp tục đi vào Controller hoặc các Filter khác
-        filterChain.doFilter(request, response);
     }
 }

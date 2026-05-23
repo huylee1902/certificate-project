@@ -1,13 +1,16 @@
 import axios from 'axios';
 
 const axiosClient = axios.create({
-  baseURL: '/api',
+  baseURL: window.location.origin + '/api',  // Điện thoại truy cập qua ngrok
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 1. Đính kèm Access Token vào mỗi request gửi đi
+// ==========================================
+// BLOCK 1: ĐÍNH KÈM ACCESS TOKEN VÀO REQUEST
+// ==========================================
 axiosClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
@@ -16,7 +19,9 @@ axiosClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Các biến để khóa các request khác trong lúc đang gọi API refresh token
+// ==========================================
+// BLOCK 2: BIẾN QUẢN LÝ HÀNG ĐỢI REFRESH
+// ==========================================
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -31,76 +36,106 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// 2. Lắng nghe response trả về, nếu lỗi 401 thì tự động lấy Token mới
+// ==========================================
+// BLOCK 3: XỬ LÝ RESPONSE / LỖI 401
+// ==========================================
 axiosClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
+
   async (error) => {
     const originalRequest = error.config;
+    const url = originalRequest?.url ?? '';
 
-    // Nếu lỗi là 401 (Hết hạn JWT) và request này chưa từng được retry
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
-      
-      // Nếu đang trong quá trình refresh token, đưa các request tiếp theo vào hàng đợi
+    // --- CASE 1: Các route Auth thuần túy (login, register, OTP, quên mật khẩu...) ---
+    // Những route này bị lỗi là do người dùng nhập sai → trả thẳng về cho trang đó tự hiển thị lỗi
+    // KHÔNG được refresh token ở đây vì người dùng chưa đăng nhập
+    const isPublicAuthRoute =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/verify-otp') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/resend-activation') ||
+      url.includes('/auth/activate');
+
+    if (isPublicAuthRoute) {
+      return Promise.reject(error);
+    }
+
+    // --- CASE 2: Chính API /auth/refresh bị lỗi ---
+    // Nghĩa là Refresh Token trong Cookie đã hết hạn hoặc bị xóa
+    // Không thể làm gì thêm → bắt đăng nhập lại
+    if (url.includes('/auth/refresh')) {
+      localStorage.removeItem('accessToken');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    // --- CASE 3: API /auth/logout bị lỗi ---
+    // Logout lỗi thì cũng không cần refresh, clear local rồi về trang login luôn
+    if (url.includes('/auth/logout')) {
+      localStorage.removeItem('accessToken');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+
+    // --- CASE 4: Các API nghiệp vụ bị 401 (Access Token hết hạn) ---
+    // Đây là trường hợp chính → tiến hành refresh token tự động
+    if (error.response?.status === 401 && !originalRequest._retry) {
+
+      // Nếu đang có request khác đang refresh rồi → đưa vào hàng đợi, chờ xong dùng token mới
       if (isRefreshing) {
-        return new Promise(function(resolve, reject) {
+        return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers.Authorization = 'Bearer ' + token;
-          return axiosClient(originalRequest);
-        }).catch(err => {
-          return Promise.reject(err);
-        });
+        })
+          .then(token => {
+            originalRequest.headers.Authorization = 'Bearer ' + token;
+            return axiosClient(originalRequest);
+          })
+          .catch(err => Promise.reject(err));
       }
 
       // Đánh dấu request này đã được retry để tránh vòng lặp vô hạn
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refreshToken');
-      
-      // Nếu không có refreshToken thì hết cứu -> đá ra màn hình login
-      if (!refreshToken) {
-          localStorage.clear();
-          window.location.href = '/login';
-          return Promise.reject(error);
-      }
-
       try {
-        // GỌI API REFRESH TOKEN XUỐNG BACKEND
-        // LƯU Ý: Đổi '/auth/refresh' thành đúng endpoint của bạn trong AuthController nhé
-        const rs = await axios.post('/api/auth/refresh', { 
-            refreshToken: refreshToken 
-        });
+        // Gọi API refresh — withCredentials tự mang Cookie refreshToken lên
+        const rs = await axios.post(
+          'http://localhost:8080/api/auth/refresh',
+          {},
+          { withCredentials: true }
+        );
 
-        // Lấy token mới từ response
-        const { accessToken, refreshToken: newRefreshToken } = rs.data.data;
+        const newAccessToken = rs.data.data.accessToken;
 
-        // Lưu lại vào localStorage
-        localStorage.setItem('accessToken', accessToken);
-        if (newRefreshToken) {
-            localStorage.setItem('refreshToken', newRefreshToken);
-        }
+        // Lưu Access Token mới vào localStorage
+        localStorage.setItem('accessToken', newAccessToken);
 
-        // Cập nhật header cho request hiện tại và gọi lại nó
-        axiosClient.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        
-        processQueue(null, accessToken);
+        // Cập nhật default header cho tất cả request sau
+        axiosClient.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
+
+        // Cập nhật header cho request hiện tại đang chờ retry
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+
+        // Giải phóng hàng đợi: các request đang chờ đều dùng token mới chạy lại
+        processQueue(null, newAccessToken);
+
+        // Chạy lại request bị lỗi ban đầu
         return axiosClient(originalRequest);
 
       } catch (_error) {
-        // Nếu API refresh token cũng lỗi (refreshToken hết hạn) -> Bắt đăng nhập lại
+        // Refresh thất bại → clear hết, bắt đăng nhập lại
         processQueue(_error, null);
-        localStorage.clear();
+        localStorage.removeItem('accessToken');
         window.location.href = '/login';
         return Promise.reject(_error);
+
       } finally {
         isRefreshing = false;
       }
     }
 
+    // --- CASE 5: Các lỗi khác (403, 404, 500...) → trả về cho component tự xử lý ---
     return Promise.reject(error);
   }
 );

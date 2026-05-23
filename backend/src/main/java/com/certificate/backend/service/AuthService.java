@@ -1,7 +1,8 @@
 package com.certificate.backend.service;
 
 import com.certificate.backend.exception.AppException;
-import com.certificate.backend.model.dto.AuthInfoModel;
+import com.certificate.backend.model.dto.Request.ForgotPasswordRequest;
+import com.certificate.backend.model.dto.Response.AuthInfoModel;
 import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.UserEntity;
@@ -9,7 +10,6 @@ import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.UserRepository;
 import com.certificate.backend.security.JwtTokenService;
-import com.certificate.backend.security.TokenBlacklistService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -33,10 +33,9 @@ public class AuthService {
     private BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
-
-    @Autowired
     private EmailService emailService;
+    @Autowired
+    private OtpService otpService;
 
     @Transactional
     public void register(RegisterRequest req){
@@ -56,8 +55,8 @@ public class AuthService {
         schoolRepository.save(newSchool);
     }
 
-    @Transactional
-    public AuthInfoModel login(String username, String password){
+
+    public void login(String username, String password){
         Optional<UserEntity> userDto = userRepository.findByUserNameOrEmail(username,username);
         if(userDto.isEmpty()){
             throw new AppException(ErrorCode.INVALID_USERNAME);
@@ -83,20 +82,35 @@ public class AuthService {
                 throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
             }
 
-            String accessToken=jwtTokenService.generateAccessToken(user);
-            long expirationTime = jwtTokenService.extractExpiration(accessToken).getTime();
-
-            String refreshToken = jwtTokenService.generateRefreshToken();
-            user.setRefreshToken(refreshToken);
-            user.setRefreshTokenExpiry(LocalDateTime.now().plusDays(7));
-            user.setLastLogin(LocalDateTime.now());
-
-            userRepository.save(user);
-            return new AuthInfoModel(accessToken, refreshToken,user.getUserName(),user.getRole(),expirationTime);
+            otpService.sendOtp(user.getEmail());
         }
         else{
             throw new AppException(ErrorCode.INVALID_USERNAME);
         }
+    }
+
+    @Transactional
+    public AuthInfoModel verifyLoginOtp(String username, String otp) {
+        // Lấy lại user
+        UserEntity user = userRepository.findByUserNameOrEmail(username, username)
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_USERNAME));
+
+        // Kiểm tra OTP bằng Redis (Sai OTP sẽ văng lỗi ngay trong hàm này)
+        otpService.verifyOtp(user.getEmail(), otp);
+        otpService.deleteOtp(user.getEmail());
+        // BẮT ĐẦU TẠO TOKEN Y HỆT CODE CŨ CỦA BẠN
+        String accessToken = jwtTokenService.generateAccessToken(user);
+        long expirationTime = jwtTokenService.extractExpiration(accessToken).getTime();
+
+        String refreshToken = jwtTokenService.generateRefreshToken();
+        user.setRefreshToken(refreshToken);
+        user.setRefreshTokenExpiry(LocalDateTime.now().plusDays(7));
+        user.setLastLogin(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        // Trả về DTO của bạn cho Controller
+        return new AuthInfoModel(accessToken, refreshToken, user.getUserName(), user.getRole(), expirationTime);
     }
 
     @Transactional
@@ -129,19 +143,17 @@ public class AuthService {
     }
 
     @Transactional
-    public void logout(String token){
-        long expirationTime = jwtTokenService.extractExpiration(token).getTime();
-        tokenBlacklistService.blacklistToken(token,expirationTime);
+    public void logout(String refreshToken){
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            return;
+        }
+        Optional<UserEntity> userOptional = userRepository.findByRefreshToken(refreshToken);
+        if (userOptional.isPresent()) {
+            UserEntity user = userOptional.get();
+            user.setRefreshToken(null);
+            user.setRefreshTokenExpiry(null);
 
-        String username = jwtTokenService.getUsernameFromToken(token);
-        if (username != null) {
-            Optional<UserEntity> userOpt = userRepository.findByUserNameOrEmail(username, username);
-            if (userOpt.isPresent()) {
-                UserEntity user = userOpt.get();
-                user.setRefreshToken(null); // Xóa Refresh Token
-                user.setRefreshTokenExpiry(null); // Xóa thời hạn
-                userRepository.save(user); // Lưu lại vào DB
-            }
+            userRepository.save(user);
         }
     }
 
@@ -204,5 +216,41 @@ public class AuthService {
          );
 
         return "Đã gửi lại email kích hoạt. Vui lòng kiểm tra hộp thư của bạn.";
+    }
+
+    public void forgotPassword(String email) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        otpService.sendOtp(user.getEmail());
+    }
+
+    public void verifyResetOtp(String email, String otp) {
+        if (otp == null || otp.isBlank()) throw new AppException(ErrorCode.OTP_INVALID);
+        otpService.verifyOtp(email, otp);
+    }
+
+    public void resetPassword(ForgotPasswordRequest request) {
+        // 1. Tự check Null cho 2 trường mật khẩu
+        if (request.getNewPassword() == null || request.getConfirmPassword() == null) {
+            throw new AppException(ErrorCode.PASSWORD_INVALID);
+        }
+
+        // 2. Check Confirm Password
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        // 3. Check OTP lần cuối
+        otpService.verifyOtp(request.getEmail(), request.getOtp());
+
+        // 4. Lưu DB
+        UserEntity user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // 5. Xóa OTP
+        otpService.deleteOtp(request.getEmail());
     }
 }
