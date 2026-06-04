@@ -48,6 +48,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.CorsConfigurationSource;
+
+import java.util.Arrays;
 
 @Configuration
 @RequiredArgsConstructor
@@ -67,7 +72,7 @@ public class SecurityConfig {
                 // Táº¯t CSRF vÃ¬ dÃ¹ng JWT (stateless, khÃ´ng dÃ¹ng cookie)
                 // CSRF chá»‰ cáº§n khi dÃ¹ng session + cookie
                 .csrf(AbstractHttpConfigurer::disable)
-
+                .cors(c -> c.configurationSource(corsConfigurationSource()))
                 // Táº¯t session - má»—i request pháº£i tá»± mang token
                 // STATELESS: server khÃ´ng lÆ°u tráº¡ng thÃ¡i cá»§a client
                 .sessionManagement(session ->
@@ -81,21 +86,34 @@ public class SecurityConfig {
                                 "/api/auth/register",
                                 "/api/auth/refresh",
                                 "/api/certificates/verify/**",
-                                "/api/certificates/search"
+                                "/api/certificates/search",
+                                "/api/auth/forgot-password",
+                                "/api/auth/forgot-password/verify",
+                                "/api/auth/forgot-password/reset",
+                                "/api/auth/verify-otp",
+                                "/api/certificates/scan",
+                                "/api/auth/activate",
+                                "/api/auth/resend-activation"
                         ).permitAll()
                         .requestMatchers(
-                                "/api/schools/*/approve",
-                                "/api/schools/*/reject",
-                                "/api/schools/*/suspend",
-                                "/api/schools/*/reinstate"
-                        ).hasAuthority("ADMIN")
+                                "/api/admin/*/approve",
+                                "/api/admin/*/reject",
+                                "/api/admin/*/suspend",
+                                "/api/admin/*/reinstate",
+                                "/api/admin/dashboard-stats",
+                                "/api/admin/schools",
+                                "/api/admin/schools/*/analytics",
+                                "/api/admin/profile"
+                        ).hasRole("ADMIN")
 
 
                         .requestMatchers(
-                                "/api/schools/*/certificates/issue",
-                                "/api/schools/*/certificates/revoke/**"
+                                "/api/students/import",
+                                "/api/certificates/issue",
+                                "/api/certificates/revoke/*",
+                                "/api/school/dashboard"
                         )
-                        .hasAuthority("SCHOOL")
+                        .hasRole("SCHOOL")
 
                         // Táº¥t cáº£ endpoint cÃ²n láº¡i Báº®T BUá»˜C pháº£i cÃ³ token há»£p lá»‡
                         .anyRequest().authenticated()
@@ -107,6 +125,18 @@ public class SecurityConfig {
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173")); // Port cá»§a React
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
 
@@ -653,24 +683,188 @@ public class CertificateRegistry extends Contract {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\controller\AccountController.java
+========================================
+
+package com.certificate.backend.controller;
+
+import com.certificate.backend.model.dto.Request.ChangeEmailRequest;
+import com.certificate.backend.model.dto.Request.ChangePasswordRequest;
+import com.certificate.backend.model.dto.Response.ApiResponse;
+import com.certificate.backend.service.AccountService;
+import com.certificate.backend.service.OtpService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/account")
+@RequiredArgsConstructor
+public class AccountController {
+    private final OtpService otpService;
+    private final AccountService accountService;
+
+    // API 1: Gá»­i OTP vá» Email cÅ©
+    @PostMapping("/change-email/send-otp")
+    public ApiResponse<?> sendOtpChangeEmail() {
+        accountService.sendOtp();
+
+        return ApiResponse.success("Gá»­i mÃ£ OTP thÃ nh cÃ´ng!");
+    }
+
+    @PostMapping("/change-email/verify")
+    public ApiResponse<?> verifyAndChangeEmail(@RequestBody ChangeEmailRequest request) {
+        accountService.verifyAndChangeEmail(request.getNewEmail(), request.getOtp());
+
+        return ApiResponse.success("Cáº­p nháº­t Ä‘á»‹a chá»‰ email má»›i thÃ nh cÃ´ng!");
+    }
+
+    @PostMapping("/change-password")
+    public ApiResponse<?> changePassword(@RequestBody ChangePasswordRequest request) {
+        accountService.changePassword(
+                request.getOldPassword(),
+                request.getNewPassword(),
+                request.getConfirmPassword()
+        );
+
+        return ApiResponse.success("Thay Ä‘á»•i máº­t kháº©u thÃ nh cÃ´ng!");
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\controller\AdminController.java
+========================================
+
+package com.certificate.backend.controller;
+
+
+import com.certificate.backend.model.dto.Response.ApiResponse;
+import com.certificate.backend.model.dto.Response.PageAdminDto;
+import com.certificate.backend.model.dto.Response.SchoolAnalyticsDto;
+import com.certificate.backend.model.dto.Response.SchoolDto;
+import com.certificate.backend.service.AccountService;
+import com.certificate.backend.service.AdminService;
+import com.certificate.backend.service.AuditLogService;
+import com.certificate.backend.service.SchoolService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/admin")
+
+public class AdminController {
+    @Autowired
+    private AdminService adminService;
+    @Autowired
+    private SchoolService schoolService;
+    @Autowired
+    private AuditLogService auditLogService;
+    @Autowired
+    private AccountService accountService;
+
+    @PutMapping("/{schoolId}/approve") // Cáº­p nháº­p tráº¡ng thÃ¡i thÃ¬ dÃ¹ng put
+    public ApiResponse<?> approve(
+            @PathVariable Long schoolId
+    ) {
+        adminService.approveSchool(schoolId);
+        return ApiResponse.success("Duyá»‡t thÃ nh cÃ´ng!");
+    }
+
+    // Tá»« chá»‘i trÆ°á»ng
+    @PutMapping("/{schoolId}/reject")
+    public ApiResponse<?> reject(
+            @PathVariable Long schoolId
+    ) {
+        adminService.rejectSchool(schoolId);
+        return ApiResponse.success("Há»‡ thá»‘ng nhÃ¢ tháº¥y thÃ´ng tin báº¡n cung cáº¥p lÃ  giáº£ máº¡o váº­y nÃªn" +
+                "tÃ i khoáº£n cuá»§a ba Ä‘Ã£ bá»‹ Tá»ª CHá»I. Xin thÃ´ng cáº£m");
+    }
+
+    // KhÃ³a trÆ°á»ng
+    @PutMapping("/{schoolId}/suspend")
+    public ApiResponse<?> suspend(
+            @PathVariable Long schoolId
+    ) {
+        adminService.suspendSchool(schoolId);
+        return ApiResponse.success("TÃ i khoáº£n bá»‹ khÃ³a!");
+    }
+
+    // Má»Ÿ khÃ³a trÆ°á»ng
+    @PutMapping("/{schoolId}/reinstate")
+    public ApiResponse<?> reinstate(@PathVariable Long schoolId) {
+        adminService.reinstateSchool(schoolId);
+        return ApiResponse.success("ÄÃ£ má»Ÿ khÃ³a trÆ°á»ng!");
+    }
+
+    @GetMapping("/dashboard-stats")
+    public ApiResponse<?> getDashboardStats() {
+        return ApiResponse.success(schoolService.getDashboardStats());
+    }
+
+    //Báº¢NG QUáº¢N LÃ TRÆ¯á»œNG
+    @GetMapping("/schools")
+
+    public ApiResponse<PageAdminDto<SchoolDto>> getSchools(
+            @RequestParam(required = false, defaultValue = "") String keyword,
+            @RequestParam(required = false, defaultValue = "ALL") String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        PageAdminDto<SchoolDto> result = schoolService.getSchools(keyword, status, page, size);
+
+        return ApiResponse.success(result);
+    }
+
+    @GetMapping("/schools/{schoolId}/analytics")
+    public ApiResponse<?> getSchoolAnalytics(@PathVariable("schoolId") Long schoolId) {
+        // Há»©ng userId tá»« Frontend, Ä‘Æ°a cho Service xá»­ lÃ½
+        SchoolAnalyticsDto data = schoolService.getSchoolAnalytics(schoolId);
+
+        // Tráº£ cá»¥c JSON vá» cho Frontend
+        return ApiResponse.success(data);
+    }
+
+    @GetMapping("/profile")
+    public ApiResponse<?> getProfile(){
+        Map<String, Object> data = accountService.getProfile();
+        return ApiResponse.success(data);
+    }
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\controller\AuthController.java
 ========================================
 
 package com.certificate.backend.controller;
 
 
-import com.certificate.backend.model.dto.AuthInfoModel;
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.dto.Request.ForgotPasswordRequest;
+import com.certificate.backend.model.dto.Request.Verify2FAOtp;
+import com.certificate.backend.model.dto.Response.AuthInfoModel;
 import com.certificate.backend.model.dto.Request.LoginRequest;
 import com.certificate.backend.model.dto.Request.RegisterRequest;
-import com.certificate.backend.model.dto.Request.RefreshTokenRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
+import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.service.AuthService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Controller;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -687,37 +881,129 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<?> login(@Valid @RequestBody LoginRequest request){
-        AuthInfoModel authDto=authService.login(request.getUsername(),request.getPassword());
-        if(authDto == null){
-            return ApiResponse.error(AUTHENTICATION_ERROR_CODE, "TÃªn Ä‘Äƒng nháº­p hoáº·c máº­t kháº©u khÃ´ng Ä‘Ãºng");
-        }
-        return ApiResponse.success(authDto);
+    public ApiResponse<?> login(@Valid @RequestBody LoginRequest request) {
+        // HÃ m nÃ y bÃ¢y giá» chá»‰ kiá»ƒm tra Pass vÃ  gá»­i Email, KHÃ”NG tráº£ vá» AuthInfoModel ná»¯a
+        authService.login(request.getUsername(), request.getPassword());
+
+        // BÃ¡o cho Frontend React biáº¿t pháº£i báº­t form OTP lÃªn
+        return ApiResponse.success(null,"OTP_REQUIRED");
+    }
+
+    @PostMapping("/verify-otp")
+    public ApiResponse<?> verifyOtp(@Valid @RequestBody Verify2FAOtp request, HttpServletResponse response) {
+
+        // 1. Kiá»ƒm tra OTP. ÄÃºng thÃ¬ Service má»›i náº·n ra cá»¥c AuthInfoModel
+        AuthInfoModel authDto = authService.verifyLoginOtp(request.getEmail(), request.getOtp());
+
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", authDto.getRefreshToken())
+                .httpOnly(true)
+                .secure(false) // local dev: false, production https: true
+                .path("/")
+                .maxAge(7 * 24 * 60 * 60) // 7 ngÃ y
+                .sameSite("Lax")
+                .build();
+
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
+
+        // 3. ÄÃ“NG GÃ“I TRáº¢ Vá»€ Dá»® LIá»†U CHO REACT (Chá»‰ tráº£ AccessToken)
+        Map<String, Object> responseBody = new HashMap<>();
+        responseBody.put("accessToken", authDto.getAccessToken());
+        responseBody.put("username", authDto.getUserName());
+        responseBody.put("role", authDto.getRole());
+        responseBody.put("expiresIn", authDto.getAccessTokenExpiredAt());
+
+        return ApiResponse.success(responseBody);
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<?> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
-        // Gá»i hÃ m xá»­ lÃ½ logic tá»« AuthService
-        AuthInfoModel authDto = authService.refreshToken(request.getRefreshToken());
+    public ApiResponse<?> refreshToken(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse response) {
 
-        // Tráº£ vá» bá»™ Token má»›i (Access Token vÃ  Refresh Token má»›i)
-        return ApiResponse.success(authDto);
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            return ApiResponse.error(401, "Thiáº¿u Refresh Token hoáº·c phiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n!");
+        }
+
+        AuthInfoModel authDto = authService.refreshToken(refreshToken);
+
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", authDto.getRefreshToken())
+                .httpOnly(true)
+                .secure(false) // Äá»•i thÃ nh true khi deploy HTTPS
+                .path("/")
+                .maxAge(7 * 24 * 60 * 60) // 7 ngÃ y
+                .sameSite("Lax")
+                .build();
+
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
+
+        // ÄÃ³ng gÃ³i data tráº£ vá» cho FE (LÆ°u Ã½: KhÃ´ng tráº£ refreshToken ra JSON Body ná»¯a)
+        Map<String, Object> responseBody = new HashMap<>();
+        responseBody.put("accessToken", authDto.getAccessToken());
+        responseBody.put("username", authDto.getUserName());
+        responseBody.put("role", authDto.getRole());
+        responseBody.put("expiresIn", authDto.getAccessTokenExpiredAt());
+
+        return ApiResponse.success(responseBody);
     }
 
     @PostMapping("/logout")
-    public ApiResponse<?> logout(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+    public ApiResponse<?> logout(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse response) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ApiResponse.error(401, "Thiáº¿u token hoáº·c token khÃ´ng Ä‘Ãºng Ä‘á»‹nh dáº¡ng!");
+        if (refreshToken != null && !refreshToken.trim().isEmpty()) {
+            authService.logout(refreshToken);
         }
 
-        // BÃ³c tÃ¡ch láº¥y Ä‘Ãºng chuá»—i token
-        String token = authHeader.substring(7);
+        ResponseCookie clearCookie = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(0) //  Tuá»•i thá» = 0 -> XÃ³a Cookie
+                .sameSite("Lax")
+                .build();
 
-        // Äáº¨Y TOÃ€N Bá»˜ LOGIC XUá»NG SERVICE Cá»¦A Báº N
-        authService.logout(token);
+        response.addHeader(HttpHeaders.SET_COOKIE, clearCookie.toString());
 
         return ApiResponse.success("ÄÄƒng xuáº¥t thÃ nh cÃ´ng!");
+    }
+
+    @GetMapping("/activate")
+    public ApiResponse<?> activateAccount(@RequestParam("token") String token) {
+        String message = authService.activateAccount(token);
+
+        return ApiResponse.success(message);
+    }
+
+    @PostMapping("/resend-activation")
+    public ApiResponse<?> resendActivation(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        if (email == null || email.isEmpty()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        authService.resendActivationEmail(email);
+        return ApiResponse.success("LiÃªn káº¿t kÃ­ch hoáº¡t má»›i Ä‘Ã£ Ä‘Æ°á»£c gá»­i vÃ o email cá»§a báº¡n.");
+    }
+
+    @PostMapping("/forgot-password")
+    public ApiResponse<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request.getEmail());
+        return ApiResponse.success("ÄÃ£ gá»­i mÃ£ OTP");
+    }
+
+    // 2. Tá»± Ä‘á»™ng check mÃ£ OTP 6 sá»‘
+    @PostMapping("/forgot-password/verify")
+    public ApiResponse<?> verifyForgotOtp(@RequestBody ForgotPasswordRequest request) {
+        authService.verifyResetOtp(request.getEmail(), request.getOtp());
+        return ApiResponse.success("MÃ£ OTP há»£p lá»‡");
+    }
+
+    // 3. Äá»•i máº­t kháº©u má»›i
+    @PostMapping("/forgot-password/reset")
+    public ApiResponse<?> resetPassword(@RequestBody ForgotPasswordRequest request) {
+        authService.resetPassword(request);
+        return ApiResponse.success("Äá»•i máº­t kháº©u thÃ nh cÃ´ng");
     }
 }
 
@@ -733,59 +1019,57 @@ import com.certificate.backend.model.dto.Request.IssueRequest;
 import com.certificate.backend.model.dto.Request.RevokeRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.IssueResponse;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.security.SecurityUserDetail;
+import com.certificate.backend.service.AuditLogService;
 import com.certificate.backend.service.CertificateService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/schools/{schoolId}/certificates")
+@RequestMapping("/api/certificates")
 public class CertificateController {
+
     @Autowired
     private CertificateService certificateService;
 
+
     @PostMapping("/issue")
     public ApiResponse<IssueResponse> issueCertificates(
-            @PathVariable Long schoolId,
-            @RequestBody IssueRequest request) {
+            @AuthenticationPrincipal SecurityUserDetail currentUser,
+            @Valid @RequestBody IssueRequest request) {
 
-        if (request.getStudentIds() == null || request.getStudentIds().isEmpty()) {
-            return ApiResponse.error(400, "Danh sÃ¡ch sinh viÃªn khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng!");
+        Long schoolId = currentUser.schoolId();
+        IssueResponse result = certificateService.issueCertificates(
+                schoolId, request);
+
+        String message;
+        if (result.getFailureCount() == 0) {
+            message = "Cáº¥p phÃ¡t vÄƒn báº±ng thÃ nh cÃ´ng toÃ n bá»™!";
+        } else if (result.getSuccessCount() > 0) {
+            message = "ÄÃ£ cáº¥p xong, nhÆ°ng cÃ³ " + result.getFailureCount() + " trÆ°á»ng há»£p bá»‹ lá»—i!";
+        } else {
+            message = "Cáº¥p phÃ¡t tháº¥t báº¡i toÃ n bá»™! Vui lÃ²ng xem chi tiáº¿t.";
         }
 
-        try {
-
-            IssueResponse result = certificateService.issueCertificates(schoolId, request);
-
-            String message;
-            if (result.getSuccessCount() > 0 && result.getFailureCount() == 0) {
-                message = "Cáº¥p phÃ¡t vÄƒn báº±ng thÃ nh cÃ´ng toÃ n bá»™!";
-            } else if (result.getSuccessCount() > 0 && result.getFailureCount() > 0) {
-                message = "ÄÃ£ cáº¥p xong, nhÆ°ng cÃ³ " + result.getFailureCount() + " trÆ°á»ng há»£p bá»‹ lá»—i!";
-            } else {
-                message = "Cáº¥p phÃ¡t tháº¥t báº¡i toÃ n bá»™! Vui lÃ²ng xem chi tiáº¿t.";
-            }
-            return ApiResponse.success(result,message);
-
-        } catch (Exception e) {
-            return ApiResponse.error(500,"Lá»—i há»‡ thá»‘ng!");
-        }
+        return ApiResponse.success(result, message);
     }
 
     @PostMapping("/revoke/{studentId}")
     public ApiResponse<?> revokeCertificate(
-            @PathVariable Long schoolId,
+            @AuthenticationPrincipal SecurityUserDetail currentUser,
             @PathVariable Long studentId,
-            @Valid @RequestBody(required = false) RevokeRequest request) {
+            @Valid @RequestBody RevokeRequest request) {
 
-        try {
-            certificateService.revokeCertificate(schoolId, studentId, request.getReason());
+        Long schoolId = currentUser.schoolId();
+        certificateService.revokeCertificate(
+                schoolId, studentId, request.getReason());
 
-            return ApiResponse.success(null, "ÄÃ£ thu há»“i vÄƒn báº±ng thÃ nh cÃ´ng!");
-        } catch (Exception e) {
-            return ApiResponse.error(500,e.getMessage());
-        }
+        return ApiResponse.success(null, "ÄÃ£ thu há»“i vÄƒn báº±ng thÃ nh cÃ´ng!");
     }
 }
 
@@ -797,62 +1081,57 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 
 package com.certificate.backend.controller;
 
-
+import com.certificate.backend.model.dto.Request.UpdateProfileRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
-import com.certificate.backend.service.AdminService;
-import lombok.RequiredArgsConstructor;
+import com.certificate.backend.model.dto.Response.ProfileResponseDto;
+import com.certificate.backend.model.dto.Response.SchoolDashboardDto;
+import com.certificate.backend.service.SchoolDashboardService;
+import com.certificate.backend.service.SchoolService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
 
 @RestController
-@RequestMapping("/api/schools")
-
+@RequestMapping("/api/school")
 public class SchoolController {
     @Autowired
-    private AdminService adminService;
+    private SchoolDashboardService dashboardService;
+    @Autowired
+    private SchoolService schoolService;
 
-    @PutMapping("/{id}/approve") // Cáº­p nháº­p tráº¡ng thÃ¡i thÃ¬ dÃ¹ng put
-    public ApiResponse<?> approve(
-            @PathVariable Long id
-    ) {
-        adminService.approveSchool(id);
-        return ApiResponse.success("Duyá»‡t thÃ nh cÃ´ng!");
+    @GetMapping("/dashboard")
+    public ApiResponse<?> getDashboard(Principal principal) {
+        String username = principal.getName();
+
+        SchoolDashboardDto data = dashboardService.getDashboardData(username);
+
+        return ApiResponse.success(data);
     }
 
-    // Tá»« chá»‘i trÆ°á»ng
-    @PutMapping("/{id}/reject")
-    public ApiResponse<?> reject(
-            @PathVariable Long id
-    ) {
-        adminService.rejectSchool(id);
-        return ApiResponse.success("Há»‡ thá»‘ng nhÃ¢ tháº¥y thÃ´ng tin báº¡n cung cáº¥p lÃ  giáº£ máº¡o váº­y nÃªn" +
-                "tÃ i khoáº£n cuá»§a ba Ä‘Ã£ bá»‹ Tá»ª CHá»I. Xin thÃ´ng cáº£m");
+    @GetMapping("/profile")
+    public ApiResponse<?> getSchoolProfile(Principal principal){
+        String username = principal.getName();
+        ProfileResponseDto data = schoolService.getSchoolProfile(username);
+        return ApiResponse.success(data);
     }
 
-    // KhÃ³a trÆ°á»ng
-    @PutMapping("/{id}/suspend")
-    public ApiResponse<?> suspend(
-            @PathVariable Long id
-    ) {
-        adminService.suspendSchool(id);
-        return ApiResponse.success("TÃ i khoáº£n bá»‹ khÃ³a!");
-    }
+    @PutMapping("/profile")
+    public ApiResponse<?> updateProfile(
+            Principal principal,
+            @Valid @RequestBody UpdateProfileRequest req){
+        String username = principal.getName();
+        ProfileResponseDto dto = schoolService.updateProfile(username, req);
 
-    // Má»Ÿ khÃ³a trÆ°á»ng
-    @PutMapping("/{id}/reinstate")
-    public ApiResponse<?> reinstate(@PathVariable Long id) {
-        adminService.reinstateSchool(id);
-        return ApiResponse.success("ÄÃ£ má»Ÿ khÃ³a trÆ°á»ng!");
+        return ApiResponse.success(dto, "Cáº­p nháº­t thÃ nh cÃ´ng!");
     }
 }
 
 
 
 ========================================
-FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\controller\StudentImportController.java
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\controller\StudentController.java
 ========================================
 
 package com.certificate.backend.controller;
@@ -860,38 +1139,40 @@ package com.certificate.backend.controller;
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.ImportResultDto;
+import com.certificate.backend.model.dto.Response.PageResponseDto;
+import com.certificate.backend.model.dto.Response.StudentResponseDto;
 import com.certificate.backend.model.enums.ErrorCode;
-import com.certificate.backend.security.SecurityUserDetails;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.security.SecurityUserDetail;
+import com.certificate.backend.service.AuditLogService;
 import com.certificate.backend.service.ImportStudentService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.certificate.backend.service.StudentService;
+
+import java.security.Principal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/students")
-public class StudentImportController {
+public class StudentController {
 
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
     @Autowired
     private ImportStudentService importStudentService;
+    @Autowired
+    private StudentService studentService;
 
     @PostMapping("/import")
     public ApiResponse<ImportResultDto> importStudents(
-            @RequestParam("file") MultipartFile file) throws Exception {
-
-        validateFile(file); // NÃ©m AppException náº¿u file khÃ´ng há»£p lá»‡
-
-        SecurityUserDetails currentUser = (SecurityUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Long userId = currentUser.getUserId();
-
-        ImportResultDto result = importStudentService.importStudents(file, userId);
-
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal SecurityUserDetail currentUser) throws Exception {
+        Long schoolId = currentUser.schoolId();
+        validateFile(file);
+        ImportResultDto result = importStudentService.importStudents(file, schoolId);
         return ApiResponse.success(
                 result,
                 "Import thÃ nh cÃ´ng " + result.getSuccessCount() + " sinh viÃªn vÃ o há»‡ thá»‘ng."
@@ -912,6 +1193,19 @@ public class StudentImportController {
             throw new AppException(ErrorCode.FILE_INVALID_FORMAT, "File khÃ´ng Ä‘Æ°á»£c vÆ°á»£t quÃ¡ 5MB");
         }
     }
+
+    @GetMapping
+    public ApiResponse<?> getStudents(
+            Principal principal,
+            @RequestParam(value = "page",defaultValue = "0") int page,
+            @RequestParam(value = "size",defaultValue = "50") int size,
+            @RequestParam(value = "search",required = false, defaultValue = "") String search,
+            @RequestParam(value = "major", required = false) String major,
+            @RequestParam(value = "status",required = false, defaultValue = "all") String status){
+        String username = principal.getName();
+        PageResponseDto<StudentResponseDto> data = studentService.getStudents(username,page, size, search,major, status);
+        return ApiResponse.success(data);
+    }
 }
 
 
@@ -922,6 +1216,7 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 
 package com.certificate.backend.controller;
 
+import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.SearchRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.SearchResponse;
@@ -956,6 +1251,15 @@ public class VerifyController {
             return ApiResponse.success(400,"XÃ¡c thá»±c tháº¥t báº¡i!");
         }
         return ApiResponse.success(res,"XÃ¡c thá»±c thÃ nh cÃ´ng!");
+    }
+
+    @GetMapping("/scan")
+    public ApiResponse<?> scanCertificate(@RequestParam String certId) {
+        SearchResponse res = verifyService.scan(certId.trim());
+        if (res == null) {
+            return ApiResponse.error(404, "KhÃ´ng tÃ¬m tháº¥y vÄƒn báº±ng!");
+        }
+        return ApiResponse.success(res, "XÃ¡c thá»±c thÃ nh cÃ´ng!");
     }
 }
 
@@ -1084,16 +1388,76 @@ public class ImportValidationException extends RuntimeException {
 
 
 ========================================
-FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\IssueRequest.java
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\ChangeEmailRequest.java
 ========================================
 
 package com.certificate.backend.model.dto.Request;
 
 import lombok.Data;
 
+@Data
+public class ChangeEmailRequest {
+    private String newEmail;
+    private String otp;
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\ChangePasswordRequest.java
+========================================
+
+package com.certificate.backend.model.dto.Request;
+
+import lombok.Data;
+
+@Data
+public class ChangePasswordRequest {
+    private String oldPassword;
+    private String newPassword;
+    private String confirmPassword;
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\ForgotPasswordRequest.java
+========================================
+
+package com.certificate.backend.model.dto.Request;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+@Data
+public class ForgotPasswordRequest {
+    @NotBlank(message = "Email khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    @Email(message = "Email khÃ´ng Ä‘Ãºng Ä‘á»‹nh dáº¡ng")
+    private String email;
+
+    // CÃ¡c trÆ°á»ng dÆ°á»›i Ä‘Ã¢y khÃ´ng dÃ¹ng @NotBlank,
+    // ta sáº½ tá»± check tay á»Ÿ Service khi cáº§n thiáº¿t.
+    private String otp;
+    private String newPassword;
+    private String confirmPassword;
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\IssueRequest.java
+========================================
+
+package com.certificate.backend.model.dto.Request;
+
+import jakarta.validation.constraints.NotEmpty;
+import lombok.Data;
+
 import java.util.List;
 @Data
 public class IssueRequest {
+    @NotEmpty(message = "Danh sÃ¡ch sinh viÃªn khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
     private List<Long> studentIds;
 
     public List<Long> getStudentIds() {
@@ -1279,6 +1643,7 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 package com.certificate.backend.model.dto.Request;
 
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -1288,6 +1653,10 @@ public class StudentDto {
 
     @NotBlank(message = "Há» vÃ  tÃªn khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
     private String fullName;
+
+    @NotBlank(message = "Email khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    @Email(message = "Email khÃ´ng Ä‘Ãºng Ä‘á»‹nh dáº¡ng")
+    private String email;
 
     @NotBlank(message = "NgÃ y sinh khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
     @Pattern(regexp = "^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[012])/\\d{4}$",
@@ -1313,6 +1682,14 @@ public class StudentDto {
 
     public String getDob() {
         return dob;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getMajor() {
@@ -1350,6 +1727,46 @@ public class StudentDto {
     public void setTrainingType(String trainingType) {
         this.trainingType = trainingType;
     }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\UpdateProfileRequest.java
+========================================
+
+package com.certificate.backend.model.dto.Request;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+@Data
+public class UpdateProfileRequest {
+    @NotBlank(message = "Äá»‹a chá»‰ trá»¥ sá»Ÿ khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    private String address;
+
+    @NotBlank(message = "TÃªn Hiá»‡u trÆ°á»Ÿng khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    private String rectorName;
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Request\Verify2FAOtp.java
+========================================
+
+package com.certificate.backend.model.dto.Request;
+
+import jakarta.validation.constraints.NotBlank;
+import lombok.Data;
+
+@Data
+public class Verify2FAOtp {
+    @NotBlank(message = "Username khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    private String email;
+
+    @NotBlank(message = "MÃ£ OTP khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng")
+    private String otp;
 }
 
 
@@ -1422,7 +1839,7 @@ public class ApiResponse<T> {
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\AuthInfoModel.java
 ========================================
 
-package com.certificate.backend.model.dto;
+package com.certificate.backend.model.dto.Response;
 
 public class AuthInfoModel {
     private String accessToken;     // dÃ¹ng Ä‘á»ƒ gá»i API
@@ -1447,7 +1864,7 @@ public class AuthInfoModel {
         return refreshToken;
     }
 
-    public String getUsername() {
+    public String getUserName() {
         return username;
     }
 
@@ -1467,7 +1884,7 @@ public class AuthInfoModel {
         this.refreshToken = refreshToken;
     }
 
-    public void setUsername(String username) {
+    public void setUserName(String username) {
         this.username = username;
     }
 
@@ -1478,6 +1895,45 @@ public class AuthInfoModel {
     public void setAccessTokenExpiredAt(Long accessTokenExpiredAt) {
         this.accessTokenExpiredAt = accessTokenExpiredAt;
     }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\ChartData.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class ChartData {
+    private String month; // VÃ­ dá»¥: "T1", "T2"
+    private long totalCert; // Sá»‘ lÆ°á»£ng vÄƒn báº±ng
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\DashboardStatsDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+import java.util.Map;
+@Data
+@Builder
+public class DashboardStatsDto {
+    private Map<String, Long> stats; // Chá»©a pendingSchools, approvedSchools...
+    private List<ChartData> chart;
 }
 
 
@@ -1587,6 +2043,122 @@ public class IssueResponse {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\PageAdminDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+
+//PhÃ¢n trang cá»§a admin
+@Data
+@Builder
+public class PageAdminDto<T> {
+    private List<T> items;
+    private int currentPage;
+    private int totalPages;
+    private long totalItems;
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\PageResponseDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.Builder;
+import lombok.Data;
+
+import java.util.List;
+@Data
+@Builder
+public class PageResponseDto<T> {
+    private List<T> content;       // Danh sÃ¡ch dá»¯ liá»‡u cá»§a trang hiá»‡n táº¡i
+    private int pageNumber;        // Trang hiá»‡n táº¡i (0-indexed)
+    private int pageSize;          // Sá»‘ pháº§n tá»­ trÃªn 1 trang
+    private long totalElements;    // Tá»•ng sá»‘ sinh viÃªn thá»a mÃ£n bá»™ lá»c trong DB
+    private int totalPages;        // Tá»•ng sá»‘ trang
+    private boolean last;          // CÃ³ pháº£i trang cuá»‘i cÃ¹ng khÃ´ng
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\ProfileResponseDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.Builder;
+
+@Builder
+public class ProfileResponseDto {
+    private String schoolName;
+    private String schoolCode;
+    private String email;
+    private String address;
+    private String rectorName;
+
+    public ProfileResponseDto() {
+    }
+
+    public ProfileResponseDto(String schoolName, String schoolCode, String email, String address, String rectorName) {
+        this.schoolName = schoolName;
+        this.schoolCode = schoolCode;
+        this.email = email;
+        this.address = address;
+        this.rectorName = rectorName;
+    }
+
+    public String getSchoolName() {
+        return schoolName;
+    }
+
+    public void setSchoolName(String schoolName) {
+        this.schoolName = schoolName;
+    }
+
+    public String getSchoolCode() {
+        return schoolCode;
+    }
+
+    public void setSchoolCode(String schoolCode) {
+        this.schoolCode = schoolCode;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getRectorName() {
+        return rectorName;
+    }
+
+    public void setRectorName(String rectorName) {
+        this.rectorName = rectorName;
+    }
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\RowErrorDto.java
 ========================================
 
@@ -1637,6 +2209,154 @@ public class RowErrorDto {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\SchoolAnalyticsDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.Builder;
+import lombok.Data;
+import java.util.List;
+
+@Data
+@Builder
+public class SchoolAnalyticsDto {
+    private InfoDTO info;
+    private StatsDTO stats;
+    private AnalyticsDTO analytics;
+    private List<LogDTO> logs;
+
+    @Data @Builder
+    public static class InfoDTO {
+        private String schoolName;
+        private String schoolCode;
+        private String status;
+        private String schoolAddress;
+        private String schoolEmail;
+        private String walletAddress;
+        private String blockchainStatus;
+        private String createdAt;
+        private String approvedBy;
+        private String approvedAt;
+        private String lastLogin;
+    }
+
+    @Data @Builder
+    public static class StatsDTO {
+        private String totalStudents;
+        private String totalIssued;
+        private String totalRevoked;
+        private String revocationRate;
+    }
+
+    @Data @Builder
+    public static class AnalyticsDTO {
+        private List<MajorData> majorData;
+        private List<MonthlyData> monthlyData;
+    }
+
+    @Data @Builder
+    public static class MajorData {
+        private String name;
+        private long value;
+    }
+
+    @Data @Builder
+    public static class MonthlyData {
+        private String name;
+        private int issued;
+    }
+
+    @Data @Builder
+    public static class LogDTO {
+        private Long id;
+        private String time;
+        private String action;
+        private String user;
+        private String desc;
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\SchoolDashboardDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import lombok.Builder;
+import lombok.Data;
+import java.util.List;
+
+@Data
+@Builder
+public class SchoolDashboardDto {
+    private long totalStudents;
+    private long issuedCertificates;
+    private long revokedCertificates;
+    private long pendingStudents;
+
+    private List<MonthlyChart> monthlyChart;
+    private List<MajorChart> majorChart;
+    private List<RecentActivity> recentActivities;
+
+    @Data
+    @Builder
+    public static class MonthlyChart {
+        private String name;
+        private long issued;
+        private long revoked;
+    }
+
+    @Data
+    @Builder
+    public static class MajorChart {
+        private String name;
+        private long value;
+    }
+
+    @Data
+    @Builder
+    public static class RecentActivity {
+        private String id;       // Sáº½ map vá»›i certId
+        private String time;     // "10 phÃºt trÆ°á»›c"
+        private String action;   // "Cáº¥p phÃ¡t vÄƒn báº±ng"
+        private String student;  // "LÃª HoÃ ng Long"
+        private String status;   // "SUCCESS" hoáº·c "REVOKED"
+        private String hash;     // "0x7a2b...f89c"
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\SchoolDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+
+import com.certificate.backend.model.enums.SchoolStatus;
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class SchoolDto {
+    private Long id;
+    private String schoolCode;
+    private String schoolName;
+    private String schoolEmail;
+    private String schoolAddress;
+    private SchoolStatus status;
+    private String date; // NgÃ y Ä‘Äƒng kÃ½ (Ä‘á»‹nh dáº¡ng String dd/MM/yyyy)
+    private long totalIssued; // ThÃªm trÆ°á»ng nÃ y cho Modal chi tiáº¿t
+    private long totalRevoked;
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\SearchResponse.java
 ========================================
 
@@ -1650,6 +2370,15 @@ public class SearchResponse {
     private String classification;
     private String status;
     private String ipfsUrl;
+    private String reasonRevoked;
+
+    public String getReasonRevoked() {
+        return reasonRevoked;
+    }
+
+    public void setReasonRevoked(String reasonRevoked) {
+        this.reasonRevoked = reasonRevoked;
+    }
 
     public String getStudentName() {
         return studentName;
@@ -1704,6 +2433,69 @@ public class SearchResponse {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\dto\Response\StudentResponseDto.java
+========================================
+
+package com.certificate.backend.model.dto.Response;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class StudentResponseDto {
+    private Long id;
+    private String studentId; // MÃ£ sá»‘ sinh viÃªn
+    private String name;      // Há» vÃ  tÃªn
+    private String email;
+    private String major;     // NgÃ nh há»c
+    private String batch;     // KhÃ³a há»c (VÃ­ dá»¥: K65)
+    private String status;    // Tráº¡ng thÃ¡i: "pending", "issued", "revoked"
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\entity\AuditLogEntity.java
+========================================
+
+package com.certificate.backend.model.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "audit_logs")
+@Data
+public class AuditLogEntity {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "schoolId")
+    private SchoolEntity school;
+
+    @Column(name = "action_type")
+    private String actionType; // VD: KÃCH HOáº T, KHÃ“A, Cáº¤P Báº°NG, THU Há»’I
+
+    @Column(columnDefinition = "TEXT")
+    private String description; // Chi tiáº¿t hÃ nh Ä‘á»™ng
+
+    @Column(name = "performed_by")
+    private String performedBy; // Ai lÃ m? (Admin, hoáº·c Email cá»§a NhÃ  trÆ°á»ng)
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt = LocalDateTime.now();
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\model\entity\CertificateEntity.java
 ========================================
 
@@ -1714,6 +2506,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -1745,6 +2538,8 @@ public class CertificateEntity {
 
     @Column(name="issueDate")
     private LocalDateTime issueDate;
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 
     @Column(nullable = false, length = 20)
     @Builder.Default
@@ -1867,6 +2662,9 @@ public class StudentEntity {
     private String fullName;
 
     @Column(nullable = false)
+    private String email;
+
+    @Column(nullable = false)
     private LocalDate dob;
 
     @Column(length = 100)
@@ -1932,6 +2730,7 @@ public class UserEntity {
 
     private LocalDateTime createdAt;
     private LocalDateTime lastLogin;
+    private LocalDateTime activeTokenExpiry;
 
     @Column(name = "role", nullable = false)
     private String role;
@@ -1942,10 +2741,11 @@ public class UserEntity {
     public UserEntity() {
     }
 
-    public UserEntity(String userName, String email, String password) {
+    public UserEntity(String userName, String email, String password,LocalDateTime createdAt) {
         this.userName = userName;
         this.email = email;
         this.password = password;
+        this.createdAt = createdAt;
         this.role =UserRole.SCHOOL.name();
     }
 
@@ -1971,12 +2771,20 @@ public enum ErrorCode {
     FILE_PARSE_ERROR(400, "KhÃ´ng thá»ƒ Ä‘á»c file Excel"),
     INVALID_SCHOOL_STATUS(400, "Thao tÃ¡c khÃ´ng há»£p lá»‡ vá»›i tráº¡ng thÃ¡i hiá»‡n táº¡i cá»§a trÆ°á»ng há»c"),
     SCHOOLCODE_EXIST(400,"MÃ£ trÆ°á»ng Ä‘Ã£ tá»“n táº¡i!"),
+    EMAIL_EXIST(400,"Email Ä‘Ã£ tá»“n táº¡i!"),
     USERNAME_EXIST(400,"TÃªn Ä‘Äƒng nháº­p hoáº·c email Ä‘Ã£ tá»“n táº¡i!"),
-
+    ACCOUNT_ALREADY_ACTIVATED(400, "TÃ i khoáº£n nÃ y Ä‘Ã£ Ä‘Æ°á»£c kÃ­ch hoáº¡t thÃ nh cÃ´ng tá»« trÆ°á»›c. Vui lÃ²ng Ä‘Äƒng nháº­p."),
+    TOKEN_INVALID(400, "ÄÆ°á»ng dáº«n khÃ´ng há»£p lá»‡ hoáº·c tÃ i khoáº£n Ä‘Ã£ Ä‘Æ°á»£c kÃ­ch hoáº¡t trÆ°á»›c Ä‘Ã³."),
+    TOKEN_EXPIRED(400, "ÄÆ°á»ng dáº«n xÃ¡c thá»±c Ä‘Ã£ háº¿t háº¡n (QuÃ¡ 24 giá»). Vui lÃ²ng yÃªu cáº§u cáº¥p láº¡i."),
+    PROFILE_INCOMPLETE(400, "Há»“ sÆ¡ chÆ°a hoÃ n thiá»‡n. Vui lÃ²ng cáº­p nháº­t tÃªn Hiá»‡u trÆ°á»Ÿng trÆ°á»›c khi cáº¥p báº±ng!"),
+    PASSWORD_MISMATCH(400, "Máº­t kháº©u xÃ¡c nháº­n má»›i khÃ´ng trÃ¹ng khá»›p"),
 
     INVALID_USERNAME(401,"TÃªn Ä‘Äƒng nháº­p hoáº·c email khÃ´ng chÃ­nh xÃ¡c!"),
     INVALID_REFRESH_TOKEN(401, "Refresh Token khÃ´ng há»£p lá»‡"),
     REFRESH_TOKEN_EXPIRED(401, "PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n, vui lÃ²ng Ä‘Äƒng nháº­p láº¡i"),
+    OTP_EXPIRED(401,"MÃ£ OTP Ä‘Ã£ háº¿t háº¡n hoáº·c chÆ°a Ä‘Æ°á»£c gá»­i"),
+    OTP_INVALID(401,"MÃ£ OTP khÃ´ng chÃ­nh xÃ¡c"),
+    PASSWORD_INVALID(401,"Máº­t kháº©u khÃ´ng chÃ­nh xÃ¡c!"),
 
 
     ACCOUNT_PENDING(403, "TÃ i khoáº£n Ä‘ang chá» duyá»‡t! Vui lÃ²ng liÃªn há»‡ quáº£n trá»‹ viÃªn"),
@@ -1986,6 +2794,7 @@ public enum ErrorCode {
     REVOKE_FAILED(403,"QuÃ¡ trÃ¬nh thu há»“i tháº¥t báº¡i!"),
     ACCOUNT_NOT_ACTIVATED(403, "TÃ i khoáº£n chÆ°a Ä‘Æ°á»£c kÃ­ch hoáº¡t. Vui lÃ²ng kiá»ƒm tra email!"),
 
+    USER_NOT_FOUND(404, "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n vá»›i email nÃ y."),
     BACKGROUND_NOT_FOUND(404,"KhÃ´ng tÃ¬m thÃ¢y vÄƒn báº±ng máº«u"),
     STUDENT_NOT_FOUND(404,"KhÃ´ng tÃ¬m tháº¥y sinh viÃªn!"),
     SCHOOL_NOT_FOUND(404, "KhÃ´ng tÃ¬m tháº¥y trÆ°á»ng há»c"),
@@ -2046,6 +2855,24 @@ public enum UserRole {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\repository\AuditLogRepository.java
+========================================
+
+package com.certificate.backend.repository;
+
+import com.certificate.backend.model.entity.AuditLogEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface AuditLogRepository extends JpaRepository<AuditLogEntity, Long> {
+
+    List<AuditLogEntity> findTop20BySchool_SchoolIdOrderByCreatedAtDesc(Long schoolId);
+    //findBySchoolId: HÃ£y tÃ¬m trong entity AuditLog, láº¥y ra cá»™t school, rá»“i vÃ o trong SchoolEntity tÃ¬m cá»™t nÃ o tÃªn lÃ  id
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\repository\CertificateRepository.java
 ========================================
 
@@ -2053,7 +2880,10 @@ package com.certificate.backend.repository;
 
 import com.certificate.backend.model.entity.CertificateEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 
@@ -2065,7 +2895,24 @@ public interface CertificateRepository extends JpaRepository<CertificateEntity,L
 
     Optional<CertificateEntity> findByFileHash(String fileHash);
 
+    long countBySchool_SchoolIdAndStatus(Long schoolId, String status);
 
+    List<CertificateEntity> findBySchool_SchoolId(Long schoolId);
+
+    @Query("SELECT COUNT(c) FROM CertificateEntity c WHERE MONTH(c.issueDate) = :month AND YEAR(c.issueDate) = :year")
+    long countCertificatesByMonthAndYear(@Param("month") int month, @Param("year") int year);
+
+    List<CertificateEntity> findTop5BySchool_SchoolIdOrderByUpdatedAtDesc(Long schoolId);
+
+    @Query("SELECT c FROM CertificateEntity c WHERE c.school.schoolId = :schoolId AND YEAR(c.issueDate) = YEAR(CURRENT_DATE)")
+    List<CertificateEntity> findAllBySchoolThisYear(@Param("schoolId") Long schoolId);
+
+    // THÃŠM HÃ€M NÃ€Y: Láº¥y sá»‘ lÆ°á»£ng báº±ng Ä‘Ã£ cáº¥p theo tá»«ng chuyÃªn ngÃ nh cá»§a sinh viÃªn
+    @Query("SELECT c.student.major as majorName, COUNT(c.id) as total " +
+            "FROM CertificateEntity c " +
+            "WHERE c.school.schoolId = :schoolId AND c.status = 'ISSUED' " +
+            "GROUP BY c.student.major")
+    List<Object[]> countIssuedCertificatesByMajor(@Param("schoolId") Long schoolId);
 }
 
 
@@ -2078,6 +2925,8 @@ package com.certificate.backend.repository;
 
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.enums.SchoolStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -2096,6 +2945,20 @@ public interface SchoolRepository extends JpaRepository<SchoolEntity, Long> {
     Optional<SchoolEntity> findByUserId(@Param("userId") Long userId);
 
     Optional<SchoolEntity> findBySchoolId(Long schoolId);
+
+    long countByStatus(SchoolStatus status);
+
+    Optional<SchoolEntity> findByUser_UserName(String username);
+
+    @Query("SELECT s FROM SchoolEntity s WHERE " +
+            "(:keyword IS NULL OR LOWER(s.schoolCode) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(s.schoolName) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+            "OR LOWER(s.user.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+            "AND (:status IS NULL OR s.status = :status)")
+    Page<SchoolEntity> searchAndFilterSchools(
+            @Param("keyword") String keyword,
+            @Param("status") String status,
+            Pageable pageable);
 }
 
 
@@ -2108,10 +2971,13 @@ package com.certificate.backend.repository;
 
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.StudentEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import java.util.List;
 
 import java.util.Set;
 
@@ -2119,6 +2985,26 @@ import java.util.Set;
 public interface StudentRepository extends JpaRepository<StudentEntity, Long> {
     @Query("SELECT s.studentId FROM StudentEntity s WHERE s.school = :school")
     public Set<String> findStudentIdsBySchool(@Param("school") SchoolEntity school);
+
+    Long countBySchool_SchoolId(Long schoolId);
+
+    long countBySchool_SchoolIdAndStatus(Long schoolId, Integer status);
+
+    List<StudentEntity> findBySchool_SchoolId(Long schoolId);
+
+    @Query("SELECT s FROM StudentEntity s WHERE s.school.schoolId = :schoolId " +
+            "AND (:status IS NULL OR s.status = :status) " +
+            "AND (:major IS NULL OR :major = '' OR s.major = :major) " + // ÄÃƒ THÃŠM LOGIC NGÃ€NH Há»ŒC
+            "AND (:search IS NULL OR :search = '' OR LOWER(s.fullName) LIKE LOWER(CONCAT('%', :search, '%')) " +
+            "OR LOWER(s.studentId) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<StudentEntity> findStudentsWithPagination(
+            @Param("schoolId") Long schoolId,
+            @Param("status") Integer status,
+            @Param("search") String search,
+            @Param("major") String major, // Tham sá»‘ má»›i
+            Pageable pageable);
+
+
 }
 
 
@@ -2133,6 +3019,7 @@ import com.certificate.backend.model.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+
 import java.util.Optional;
 
 @Repository
@@ -2145,7 +3032,11 @@ public interface UserRepository extends JpaRepository<UserEntity,Long> {
 
     Optional<UserEntity> findByRefreshToken(String refreshToken);
 
-    Optional<UserEntity> findByUserName(String username);
+    Optional<UserEntity> findByActiveToken(String activeToken);
+
+    Optional<UserEntity> findByEmail(String email);
+
+    Optional<UserEntity> findByUserName(String userName);
 }
 
 
@@ -2156,6 +3047,7 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 
 package com.certificate.backend.security;
 
+import com.certificate.backend.model.enums.SchoolStatus;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
 import io.jsonwebtoken.security.SignatureException;
@@ -2182,12 +3074,10 @@ public class JwtFilter extends OncePerRequestFilter {
     private JwtTokenService jwtTokenService;
 
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
-
-
+    private SecurityUserDetailsService userDetailsService;
 
     private String parseJwtToken(HttpServletRequest request){
-        // TÃ¡ch token tá»« header request
+
         final String authHeader = request.getHeader("Authorization");
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7);
@@ -2220,51 +3110,46 @@ public class JwtFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // 2. Token Ä‘Ã£ bá»‹ Blacklist (ÄÄƒng xuáº¥t)
-            if (tokenBlacklistService.isTokenBlacklisted(token)) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setCharacterEncoding("UTF-8");
-                response.getWriter().write("Token nÃ y Ä‘Ã£ bá»‹ Ä‘Äƒng xuáº¥t/thu há»“i!");
-                return;
-            }
 
-            // 3. Giáº£i mÃ£ vÃ  kiá»ƒm tra Token
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 // Náº¿u validateToken nÃ©m lá»—i, nÃ³ sáº½ nháº£y tháº³ng xuá»‘ng block catch bÃªn dÆ°á»›i
                 if (jwtTokenService.validateToken(token)) {
                     String username = jwtTokenService.getUsernameFromToken(token);
 
-                    // 4. Kiá»ƒm tra tÃ i khoáº£n bá»‹ khÃ³a
-                    if (username != null && tokenBlacklistService.isUserSuspended(username)) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN); // 403
-                        response.setCharacterEncoding("UTF-8");
-                        response.getWriter().write("TÃ i khoáº£n cá»§a báº¡n Ä‘Ã£ bá»‹ Admin khÃ³a!");
-                        return;
-                    }
-
-                    // 5. Cáº¥p quyá»n thÃ nh cÃ´ng
                     if (username != null) {
-                        List<GrantedAuthority> authorities = jwtTokenService.getRolesFromToken(token);
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                        SecurityUserDetail myUser = (SecurityUserDetail) userDetails;
+                        if(myUser.getSchool()!= null){
+                            if (myUser.getUser().getSchool().getStatus() == SchoolStatus.SUSPENDED) {
+                                SecurityContextHolder.clearContext();
+                                response.setStatus(HttpServletResponse.SC_FORBIDDEN); // 403 ÄÃ¡ vÄƒng
+                                response.setContentType("application/json;charset=UTF-8");
+                                response.getWriter().write("{\"code\": 403, \"message\": \"TÃ i khoáº£n cá»§a báº¡n Ä‘Ã£ bá»‹ Admin khÃ³a!\"}");
+                                return;
+                            }
+                        }
+
                         UsernamePasswordAuthenticationToken authToken =
-                                new UsernamePasswordAuthenticationToken(username, null, authorities);
+                                new UsernamePasswordAuthenticationToken(myUser, null, myUser.getAuthorities());
                         SecurityContextHolder.getContext().setAuthentication(authToken);
                     }
                 }
             }
-        } catch (ExpiredJwtException | SignatureException | MalformedJwtException e) {
-            // Báº®T Lá»–I Tá»ª THÆ¯ VIá»†N JWT: Äá»«ng return 401 á»Ÿ Ä‘Ã¢y!
-            // Cá»© xÃ³a Context (Ä‘á»ƒ Ä‘áº£m báº£o an toÃ n) rá»“i cho request Ä‘i qua.
-            // Náº¿u há» Ä‘ang gá»i API Login -> Váº«n login bÃ¬nh thÆ°á»ng.
-            // Náº¿u há» gá»i API cáº§n quyá»n -> Spring Security (AuthenticationEntryPoint) sáº½ tá»± vÄƒng lá»—i 401 thay cho báº¡n.
-            SecurityContextHolder.clearContext();
 
-            // System.out.println("Cáº£nh bÃ¡o: Token háº¿t háº¡n hoáº·c khÃ´ng há»£p lá»‡: " + e.getMessage());
-        } catch (Exception e) {
+            filterChain.doFilter(request, response);
+
+        } catch (ExpiredJwtException e) {
             SecurityContextHolder.clearContext();
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setHeader("Access-Control-Allow-Origin", request.getHeader("Origin"));
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\": 401, \"message\": \"Access Token Ä‘Ã£ háº¿t háº¡n\"}");
+            return; // QUAN TRá»ŒNG: Pháº£i return Ä‘á»ƒ ngáº¯t luá»“ng, khÃ´ng cho Ä‘i tiáº¿p xuá»‘ng FilterChain
+
         }
 
-        // Cho phÃ©p request tiáº¿p tá»¥c Ä‘i vÃ o Controller hoáº·c cÃ¡c Filter khÃ¡c
-        filterChain.doFilter(request, response);
     }
 }
 
@@ -2276,10 +3161,8 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 
 package com.certificate.backend.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
+import com.certificate.backend.model.entity.UserEntity;
+import io.jsonwebtoken.*;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import io.jsonwebtoken.security.Keys;
@@ -2310,22 +3193,17 @@ public class JwtTokenService {
     }
 
     // â”€â”€ Táº¡o Access Token â”€â”€
-    public String generateAccessToken(String username,String role) {
+    public String generateAccessToken(UserEntity user) {
         return Jwts.builder()
-                .subject(username)
-                .claim("type", "access")    // ÄÃ¡nh dáº¥u loáº¡i token
-                //PAYLOAD: { "sub": "admin", "type": "access", "iat": 1234, "exp": 5678 }
-                // Äá»ƒ phÃ¢n biá»‡t accessToken vÃ  refreshToken
-                .claim("role",role)
+                .subject(user.getUserName())
+                .claim("type", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessExpiration))
                 .signWith(signingKey)
                 .compact();
+
     }
 
-    // â”€â”€ Táº¡o Refresh Token â”€â”€
-    // RefreshToken chá»‰ lÃ  chuá»—i random, khÃ´ng cáº§n JWT
-    // LÆ°u vÃ o DB Ä‘á»ƒ kiá»ƒm soÃ¡t - Ä‘Æ¡n giáº£n vÃ  hiá»‡u quáº£
     public String generateRefreshToken() {
         return UUID.randomUUID().toString();
     }
@@ -2342,6 +3220,7 @@ public class JwtTokenService {
             return "access".equals(claims.get("type")) && claims.getExpiration().after(new Date());
         } catch (ExpiredJwtException e) {
             System.err.println("Token Ä‘Ã£ háº¿t háº¡n: " + e.getMessage());
+            throw e;
         } catch (JwtException | IllegalArgumentException e) {
             System.err.println("Token khÃ´ng há»£p lá»‡: " + e.getMessage());
         }
@@ -2350,15 +3229,6 @@ public class JwtTokenService {
 
     public String getUsernameFromToken(String token) {
         return parseClaims(token).getSubject();
-    }
-    public List<GrantedAuthority> getRolesFromToken(String token) {
-        Claims claims = parseClaims(token);
-
-        // Láº¥y chá»¯ "ROLE_ADMIN" hoáº·c "ROLE_SCHOOL" tá»« payload
-        String role = claims.get("role", String.class);
-
-        // GÃ³i nÃ³ vÃ o Ä‘á»‹nh dáº¡ng mÃ  Spring Security hiá»ƒu Ä‘Æ°á»£c
-        return List.of(new SimpleGrantedAuthority(role));
     }
 
     private Claims parseClaims(String token) {
@@ -2373,28 +3243,25 @@ public class JwtTokenService {
 
 
 ========================================
-FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\security\SecurityUserDetails.java
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\security\SecurityUserDetail.java
 ========================================
 
 package com.certificate.backend.security;
 
+import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.UserEntity;
+import java.util.Collection;
+import java.util.List;
+
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.Collection;
-import java.util.List;
-
-public class SecurityUserDetails implements UserDetails {
+public class SecurityUserDetail implements UserDetails {
     private final UserEntity user;
 
-    public SecurityUserDetails(UserEntity user) {
+    public SecurityUserDetail(UserEntity user) {
         this.user = user;
-    }
-
-    public Long getUserId() {
-        return user.getUserId();
     }
 
     @Override
@@ -2412,10 +3279,15 @@ public class SecurityUserDetails implements UserDetails {
         return user.getUserName();
     }
 
-    public String getActualActiveToken() {
-        return user.getActiveToken();
+    public UserEntity getUser() {
+        return this.user;
     }
-
+    public Long schoolId(){
+        return user.getSchool().getSchoolId();
+    }
+    public SchoolEntity getSchool(){
+        return this.user.getSchool();
+    }
 }
 
 
@@ -2439,61 +3311,223 @@ public class SecurityUserDetailsService implements UserDetailsService {
     @Autowired
     private UserRepository userRepository;
 
+    @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         UserEntity user = userRepository.findByUserName(username)
                 .orElseThrow(() -> new UsernameNotFoundException(username));
-        return new SecurityUserDetails(user);
+        return new SecurityUserDetail(user);
     }
 }
 
 
 
 ========================================
-FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\security\TokenBlacklistService.java
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\impl\StudentServiceImpl.java
 ========================================
 
-package com.certificate.backend.security;
+package com.certificate.backend.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.dto.Request.IssueRequest;
+import com.certificate.backend.model.dto.Response.ImportResultDto;
+import com.certificate.backend.model.dto.Response.IssueResponse;
+import com.certificate.backend.model.dto.Response.PageResponseDto;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.entity.StudentEntity;
+import com.certificate.backend.model.enums.ErrorCode;
+import com.certificate.backend.repository.CertificateRepository;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.repository.StudentRepository;
+import com.certificate.backend.service.CertificateService;
+import com.certificate.backend.service.ImportStudentService;
+import com.certificate.backend.service.StudentService;
+import com.certificate.backend.model.dto.Response.StudentResponseDto;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
-public class TokenBlacklistService {
+@RequiredArgsConstructor
+@Slf4j
+public class StudentServiceImpl implements StudentService {
+    private final StudentRepository studentRepository;
+    private final CertificateRepository certificateRepository;
+    private final CertificateService certificateService;
+    private final ImportStudentService importStudentService;
+    private final SchoolRepository schoolRepository;
+
+    @Override
+    public PageResponseDto<StudentResponseDto> getStudents(
+            String username, int page, int size, String search,String major, String status) {
+
+        SchoolEntity school = schoolRepository.findByUser_UserName(username)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        Long schoolId = school.getSchoolId();
+        // 1. Ãnh xáº¡ tráº¡ng thÃ¡i tá»« chuá»—i cá»§a FE sang sá»‘ Integer cá»§a BE
+        Integer dbStatus = null;
+        if ("pending".equals(status)) dbStatus = 0;
+        else if ("issued".equals(status)) dbStatus = 1;
+        else if ("revoked".equals(status)) dbStatus = 2;
+
+        // 2. Äá»‹nh nghÄ©a thá»© tá»± hiá»ƒn thá»‹ (Quy Æ°á»›c sáº¯p xáº¿p):
+        Pageable pageable = PageRequest.of(page, size, Sort.by(
+                Sort.Order.desc("id"),         // Má»›i import xáº¿p lÃªn trÆ°á»›c
+                Sort.Order.asc("studentId")    // CÃ¹ng má»›i import thÃ¬ xáº¿p theo mÃ£ sinh viÃªn
+        ));
+
+        // 3. Truy váº¥n phÃ¢n trang tá»« Database
+        Page<StudentEntity> studentPage = studentRepository.findStudentsWithPagination(
+                schoolId, dbStatus, (search == null || search.trim().isEmpty()) ? null : search,major, pageable);
+
+        // 4. Chuyá»ƒn Ä‘á»•i Entity sang DTO gá»­i vá» cho React
+        List<StudentResponseDto> dtoList = studentPage.getContent().stream().map(s -> {
+            String reactStatus = "pending";
+            if (s.getStatus() == 1) reactStatus = "issued";
+            else if (s.getStatus() == 2) reactStatus = "revoked";
+
+            return StudentResponseDto.builder()
+                    .id(s.getId())
+                    .studentId(s.getStudentId())
+                    .name(s.getFullName())
+                    .email(s.getEmail())
+                    .major(s.getMajor())
+                    .batch(s.getTrainingType() != null ? s.getTrainingType() : "ChÃ­nh quy")
+                    .status(reactStatus)
+                    .build();
+        }).collect(Collectors.toList());
+
+        // 5. ÄÃ³ng gÃ³i káº¿t quáº£ phÃ¢n trang
+        return PageResponseDto.<StudentResponseDto>builder()
+                .content(dtoList)
+                .pageNumber(studentPage.getNumber())
+                .pageSize(studentPage.getSize())
+                .totalElements(studentPage.getTotalElements())
+                .totalPages(studentPage.getTotalPages())
+                .last(studentPage.isLast())
+                .build();
+    }
+
+    @Override
+    public ImportResultDto importStudentsFromExcel(MultipartFile file, Long schoolId) throws Exception{
+        log.info("Xá»­ lÃ½ import Excel cho trÆ°á»ng ID: {}", schoolId);
+        return importStudentService.importStudents(file,schoolId);
+    }
+
+    @Override
+    public IssueResponse issueCertificates(Long schoolId, IssueRequest request) {
+        log.info("Chuyá»ƒn tiáº¿p tÃ¡c vá»¥ Batch Cáº¥p phÃ¡t sang CertificateService nghiá»‡p vá»¥...");
+        // Gá»i hÃ m phÃ¢n chunk nhá» hÆ¡n hoáº·c báº±ng 50 vÃ  ghi Blockchain cá»§a báº¡n
+        return certificateService.issueCertificates(schoolId, request);
+    }
+
+    @Override
+    public void revokeCertificate(Long schoolId, Long studentId, String reason) {
+        log.info("Chuyá»ƒn tiáº¿p tÃ¡c vá»¥ tÆ°á»›c quyá»n vÄƒn báº±ng sang CertificateService nghiá»‡p vá»¥...");
+        // Gá»i hÃ m thu há»“i báº±ng, cáº­p nháº­t Smart Contract cá»§a báº¡n
+        certificateService.revokeCertificate(schoolId, studentId, reason);
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\AccountService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.entity.UserEntity;
+import com.certificate.backend.model.enums.ErrorCode;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.repository.UserRepository;
+import com.certificate.backend.security.SecurityUserDetail;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class AccountService {
     @Autowired
-    private StringRedisTemplate redisTemplate;
+    private OtpService otpService;
+    @Autowired
+    private SchoolRepository schoolRepository;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
 
+    private SecurityUserDetail getCurrentUserDetail() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return (SecurityUserDetail) authentication.getPrincipal();
+    }
 
-    public void blacklistToken(String token, long expirationTimeInMillis) {
-        long currentTime = System.currentTimeMillis();
-        long ttl = expirationTimeInMillis - currentTime;
+    public String getCurrentEmail() {
+        SecurityUserDetail userDetail = getCurrentUserDetail();
+        return userDetail.getUser().getEmail();
+    }
+    public Map<String, Object> getProfile() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("email", getCurrentEmail());
+        return data;
+    }
+    public void sendOtp() {
+        otpService.sendOtp(getCurrentEmail());
+    }
 
-        // Náº¿u token váº«n cÃ²n háº¡n thÃ¬ má»›i tá»‘n cÃ´ng nÃ©n vÃ o Redis
-        if (ttl > 0) {
-            // LÆ°u vÃ o Redis vá»›i cáº¥u trÃºc: Key = "BL_eyJhb...", Value = "revoked"
-            // VÃ  háº¹n giá» tá»± Ä‘á»™ng xÃ³a (ttl) Ä‘Ãºng báº±ng thá»i gian sá»‘ng cÃ²n láº¡i cá»§a JWT
-            redisTemplate.opsForValue().set("BL_" + token, "revoked", ttl, TimeUnit.MILLISECONDS);
-            System.out.println("ÄÃ£ nÃ©m Token vÃ o Blacklist. Sáº½ tá»± Ä‘á»™ng dá»n rÃ¡c sau: " + (ttl/1000) + " giÃ¢y.");
+    @Transactional
+    public void verifyAndChangeEmail(String newEmail, String otp) {
+        SecurityUserDetail userDetail = getCurrentUserDetail();
+        UserEntity user = userDetail.getUser();
+
+        otpService.verifyOtp(getCurrentEmail(), otp);
+        otpService.deleteOtp(getCurrentEmail());
+        if (userRepository.existsByEmail(newEmail)) {
+            throw new AppException(ErrorCode.EMAIL_EXIST);
         }
+
+        user.setEmail(newEmail);
+        userRepository.save(user);
     }
 
-    public boolean isTokenBlacklisted(String token) {
-        // Kiá»ƒm tra xem Redis cÃ³ Ä‘ang chá»©a Key nÃ y khÃ´ng
-        return Boolean.TRUE.equals(redisTemplate.hasKey("BL_" + token));
-    }
+    @Transactional
+    public void changePassword(String oldPassword, String newPassword, String confirmPassword) {
+        // 1. Láº¥y thÃ´ng tin Ä‘á»‘i tÆ°á»£ng UserEntity Ä‘ang login tá»« SecurityContext
+        UserEntity currentUser = getCurrentUserDetail().getUser();
 
-    public void blacklistUser(String username, long durationInMillis) {
-        // NÃ©m username vÃ o Redis (VÃ­ dá»¥: SUSPENDED_USER:truongbkhn)
-        redisTemplate.opsForValue().set("SUSPENDED_USER:" + username, "locked", durationInMillis, TimeUnit.MILLISECONDS);
-    }
+        // 2. Kiá»ƒm tra máº­t kháº©u cÅ© nháº­p vÃ o cÃ³ khá»›p vá»›i máº­t kháº©u Ä‘Ã£ mÃ£ hÃ³a trong DB khÃ´ng
+        if (!passwordEncoder.matches(oldPassword, currentUser.getPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_INVALID);
+        }
 
-    // HÃ€M Má»šI Äá»‚ FILTER KIá»‚M TRA
-    public boolean isUserSuspended(String username) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey("SUSPENDED_USER:" + username));
-    }
+        // 3. Kiá»ƒm tra máº­t kháº©u má»›i vÃ  xÃ¡c nháº­n máº­t kháº©u
+        if (!newPassword.equals(confirmPassword)) {
+            throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+        }
 
+        // 4. TÃ¬m trong DB vÃ  cáº­p nháº­t máº­t kháº©u Ä‘Ã£ mÃ£ hÃ³a má»›i
+        UserEntity userToUpdate = userRepository.findById(currentUser.getUserId())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        userToUpdate.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(userToUpdate);
+    }
 }
 
 
@@ -2506,15 +3540,14 @@ package com.certificate.backend.service;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.SchoolEntity;
-import com.certificate.backend.model.entity.UserEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.model.enums.SchoolStatus;
 import com.certificate.backend.repository.SchoolRepository;
-import com.certificate.backend.repository.UserRepository;
-import com.certificate.backend.security.TokenBlacklistService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 
 @Service
@@ -2530,18 +3563,16 @@ public class AdminService {
     private BlockchainService blockchainService;
     @Autowired
     private EmailService emailService;
-
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
+    private AuditLogService auditLogService;
+
 
     @Transactional
     public void approveSchool(Long schoolId) {
 
-        // Láº¥y thÃ´ng tin trÆ°á»ng
         SchoolEntity school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
-        // Chá»‰ duyá»‡t Ä‘Æ°á»£c trÆ°á»ng Ä‘ang PENDING
         if (school.getStatus() != SchoolStatus.PENDING) {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS,
                     "TrÆ°á»ng khÃ´ng á»Ÿ tráº¡ng thÃ¡i chá» duyá»‡t! Tráº¡ng thÃ¡i hiá»‡n táº¡i: "
@@ -2553,7 +3584,6 @@ public class AdminService {
 
         blockchainService.fundSchoolWallet(wallet.getWalletAddress(), "20.0");
 
-        // Cáº¥p quyá»n trÃªn Smart Contract
         blockchainService.authorizeSchool(
                 wallet.getWalletAddress(),
                 school.getSchoolName(),
@@ -2563,21 +3593,20 @@ public class AdminService {
         school.setWalletAddress(wallet.getWalletAddress());
         school.setPrivateKeyEncrypted(wallet.getPrivateKeyEncrypted());
         String token = java.util.UUID.randomUUID().toString();
-        school.getUser().setActiveToken(token); // Báº¡n nhá»› táº¡o thÃªm trÆ°á»ng activationToken vÃ  isActive trong SchoolEntity nhÃ©
-        school.getUser().setActive(false);          // ChÆ°a click link mail thÃ¬ chÆ°a cho login
+        school.getUser().setActiveToken(token);
+        school.getUser().setActiveTokenExpiry(LocalDateTime.now().plusHours(24));
+        school.getUser().setActive(false);
 
-        schoolRepository.save(school);
-
-        // --- Gá»ŒI EMAIL SERVICE Gá»ŒN GÃ€NG ---
-        String activationLink = "http://localhost:3000/activate?token=" + token;
+        String activationLink = "http://localhost:5173/activate?token=" + token;
 
         emailService.sendActivationEmail(
-                school.getUser().getEmail(), // Láº¥y email cá»§a trÆ°á»ng
+                school.getUser().getEmail(),
                 "XÃ¡c thá»±c & KÃ­ch hoáº¡t tÃ i khoáº£n Há»‡ thá»‘ng VÄƒn báº±ng",
                 school.getSchoolName(),
                 activationLink
         );
         school.setStatus(SchoolStatus.APPROVED);
+        auditLogService.logAction(schoolId,"Duyá»‡t tÃ i khoáº£n","Admin Ä‘Ã£ duyá»‡t tÃ i khoáº£n tá»• chá»©c","System Admin");
         schoolRepository.save(school);
 
     }
@@ -2592,9 +3621,6 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chá»‰ tá»« chá»‘i Ä‘Æ°á»£c trÆ°á»ng Ä‘ang PENDING!");
         }
 
-
-        // Tá»« chá»‘i chá»‰ cáº­p nháº­t DB, khÃ´ng cáº§n gá»i blockchain
-        // VÃ¬ trÆ°á»ng chÆ°a Ä‘Æ°á»£c authorize nÃªn khÃ´ng cÃ³ gÃ¬ trÃªn blockchain
         school.setStatus(SchoolStatus.REJECTED);
         schoolRepository.save(school);
     }
@@ -2609,13 +3635,10 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chá»‰ khÃ³a Ä‘Æ°á»£c trÆ°á»ng Ä‘ang APPROVED!");
         }
 
-        // â”€â”€ BÆ°á»›c 1: Gá»i smart contract suspendSchool â”€â”€
         blockchainService.suspendSchool(school.getWalletAddress());
 
-        UserEntity user = school.getUser();
-        tokenBlacklistService.blacklistUser(user.getUserName(), 1800000);
-        // â”€â”€ BÆ°á»›c 2: Cáº­p nháº­t DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         school.setStatus(SchoolStatus.SUSPENDED);
+        auditLogService.logAction(schoolId,"KhÃ³a tÃ i khoáº£n","Admin Ä‘Ã£ khÃ³a tÃ i khoáº£n tá»• chá»©c!","System Admin");
         schoolRepository.save(school);
     }
 
@@ -2629,15 +3652,48 @@ public class AdminService {
             throw new AppException(ErrorCode.INVALID_SCHOOL_STATUS, "Chá»‰ má»Ÿ khÃ³a Ä‘Æ°á»£c trÆ°á»ng Ä‘ang SUSPENDED!");
         }
 
-        // Gá»i smart contract reinstateSchool
         blockchainService.reinstateSchool(school.getWalletAddress());
 
         school.setStatus(SchoolStatus.APPROVED);
+        auditLogService.logAction(schoolId,"Má»Ÿ khÃ³a","Admin Ä‘Ã£ khÃ³a tÃ i khoáº£n tá»• chá»©c!","System Admin");
         schoolRepository.save(school);
 
     }
 }
 
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\AuditLogService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.model.entity.AuditLogEntity;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.repository.AuditLogRepository;
+import com.certificate.backend.repository.SchoolRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class AuditLogService {
+    @Autowired
+    private AuditLogRepository auditLogRepository;
+    @Autowired
+    private SchoolRepository schoolRepository;
+
+    // HÃ m nÃ y sáº½ Ä‘Æ°á»£c gá»i á»Ÿ báº¥t cá»© Ä‘Ã¢u cÃ³ sá»± kiá»‡n thay Ä‘á»•i dá»¯ liá»‡u
+    public void logAction(Long schoolId, String actionType, String description, String performedBy) {
+        AuditLogEntity log = new AuditLogEntity();
+        log.setSchool(schoolRepository.getReferenceById(schoolId));
+        log.setActionType(actionType);
+        log.setDescription(description);
+        log.setPerformedBy(performedBy);
+        auditLogRepository.save(log);
+    }
+}
 
 
 
@@ -2648,7 +3704,8 @@ FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\bac
 package com.certificate.backend.service;
 
 import com.certificate.backend.exception.AppException;
-import com.certificate.backend.model.dto.AuthInfoModel;
+import com.certificate.backend.model.dto.Request.ForgotPasswordRequest;
+import com.certificate.backend.model.dto.Response.AuthInfoModel;
 import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.UserEntity;
@@ -2656,7 +3713,6 @@ import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.UserRepository;
 import com.certificate.backend.security.JwtTokenService;
-import com.certificate.backend.security.TokenBlacklistService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -2680,7 +3736,9 @@ public class AuthService {
     private BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
-    private TokenBlacklistService tokenBlacklistService;
+    private EmailService emailService;
+    @Autowired
+    private OtpService otpService;
 
     @Transactional
     public void register(RegisterRequest req){
@@ -2691,7 +3749,7 @@ public class AuthService {
             throw new AppException(ErrorCode.SCHOOLCODE_EXIST);
         }
         String encodePassword= passwordEncoder.encode(req.getPassword());
-        UserEntity newUser= new UserEntity(req.getUsername(),req.getSchoolEmail(),encodePassword);
+        UserEntity newUser= new UserEntity(req.getUsername(),req.getSchoolEmail(),encodePassword,LocalDateTime.now());
 
         userRepository.save(newUser);
 
@@ -2700,8 +3758,8 @@ public class AuthService {
         schoolRepository.save(newSchool);
     }
 
-    @Transactional
-    public AuthInfoModel login(String username, String password){
+
+    public void login(String username, String password){
         Optional<UserEntity> userDto = userRepository.findByUserNameOrEmail(username,username);
         if(userDto.isEmpty()){
             throw new AppException(ErrorCode.INVALID_USERNAME);
@@ -2726,21 +3784,36 @@ public class AuthService {
             if(!user.isActive()){
                 throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
             }
-            String role =user.getRole();
-            String accessToken=jwtTokenService.generateAccessToken(user.getUserName(),role);
-            long expirationTime = jwtTokenService.extractExpiration(accessToken).getTime();
 
-            String refreshToken = jwtTokenService.generateRefreshToken();
-            user.setRefreshToken(refreshToken);
-            user.setRefreshTokenExpiry(LocalDateTime.now().plusDays(7));
-            user.setLastLogin(LocalDateTime.now());
-
-            userRepository.save(user);
-            return new AuthInfoModel(accessToken, refreshToken,user.getUserName(),user.getRole(),expirationTime);
+            otpService.sendOtp(user.getEmail());
         }
         else{
             throw new AppException(ErrorCode.INVALID_USERNAME);
         }
+    }
+
+    @Transactional
+    public AuthInfoModel verifyLoginOtp(String username, String otp) {
+        // Láº¥y láº¡i user
+        UserEntity user = userRepository.findByUserNameOrEmail(username, username)
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_USERNAME));
+
+        // Kiá»ƒm tra OTP báº±ng Redis (Sai OTP sáº½ vÄƒng lá»—i ngay trong hÃ m nÃ y)
+        otpService.verifyOtp(user.getEmail(), otp);
+        otpService.deleteOtp(user.getEmail());
+        // Báº®T Äáº¦U Táº O TOKEN Y Há»†T CODE CÅ¨ Cá»¦A Báº N
+        String accessToken = jwtTokenService.generateAccessToken(user);
+        long expirationTime = jwtTokenService.extractExpiration(accessToken).getTime();
+
+        String refreshToken = jwtTokenService.generateRefreshToken();
+        user.setRefreshToken(refreshToken);
+        user.setRefreshTokenExpiry(LocalDateTime.now().plusDays(7));
+        user.setLastLogin(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        // Tráº£ vá» DTO cá»§a báº¡n cho Controller
+        return new AuthInfoModel(accessToken, refreshToken, user.getUserName(), user.getRole(), expirationTime);
     }
 
     @Transactional
@@ -2757,9 +3830,9 @@ public class AuthService {
             userRepository.save(user);
             throw new AppException(ErrorCode.REFRESH_TOKEN_EXPIRED);
         }
-        String role = user.getRole();
+
         // 3. Táº¡o Access Token má»›i
-        String newAccessToken = jwtTokenService.generateAccessToken(user.getUserName(),role);
+        String newAccessToken = jwtTokenService.generateAccessToken(user);
         long expirationTime = jwtTokenService.extractExpiration(newAccessToken).getTime();
 
         // 4. (TÃ¹y chá»n) Rotate Refresh Token - Táº¡o luÃ´n refresh token má»›i Ä‘á»ƒ tÄƒng báº£o máº­t
@@ -2773,20 +3846,115 @@ public class AuthService {
     }
 
     @Transactional
-    public void logout(String token){
-        long expirationTime = jwtTokenService.extractExpiration(token).getTime();
-        tokenBlacklistService.blacklistToken(token,expirationTime);
-
-        String username = jwtTokenService.getUsernameFromToken(token);
-        if (username != null) {
-            Optional<UserEntity> userOpt = userRepository.findByUserNameOrEmail(username, username);
-            if (userOpt.isPresent()) {
-                UserEntity user = userOpt.get();
-                user.setRefreshToken(null); // XÃ³a Refresh Token
-                user.setRefreshTokenExpiry(null); // XÃ³a thá»i háº¡n
-                userRepository.save(user); // LÆ°u láº¡i vÃ o DB
-            }
+    public void logout(String refreshToken){
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            return;
         }
+        Optional<UserEntity> userOptional = userRepository.findByRefreshToken(refreshToken);
+        if (userOptional.isPresent()) {
+            UserEntity user = userOptional.get();
+            user.setRefreshToken(null);
+            user.setRefreshTokenExpiry(null);
+
+            userRepository.save(user);
+        }
+    }
+
+    @Transactional
+    public String activateAccount(String token){
+        Optional<UserEntity> userOpt = userRepository.findByActiveToken(token);
+
+        if (userOpt.isEmpty()) {
+            throw new AppException(ErrorCode.TOKEN_INVALID);
+        }
+
+        UserEntity user = userOpt.get();
+
+        if (user.isActive() ) {
+            user.setActiveToken(null);
+            user.setActiveTokenExpiry(null);
+            userRepository.save(user);
+            throw new AppException(ErrorCode.ACCOUNT_ALREADY_ACTIVATED);
+        }
+
+        if (user.getActiveTokenExpiry() != null && user.getActiveTokenExpiry().isBefore(LocalDateTime.now())) {
+            // CÃ³ thá»ƒ xÃ³a token háº¿t háº¡n Ä‘i cho sáº¡ch DB
+            user.setActiveToken(null);
+            user.setActiveTokenExpiry(null);
+            userRepository.save(user);
+            throw new AppException(ErrorCode.TOKEN_EXPIRED);
+        }
+
+        user.setActive(true);
+        user.setActiveToken(null);
+        user.setActiveTokenExpiry(null);
+
+        userRepository.save(user);
+
+        return "KÃ­ch hoáº¡t tÃ i khoáº£n thÃ nh cÃ´ng!";
+
+    }
+
+
+    public String resendActivationEmail(String email) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.isActive()) {
+            throw new AppException(ErrorCode.ACCOUNT_ALREADY_ACTIVATED);
+        }
+
+        String newToken = java.util.UUID.randomUUID().toString();
+        user.setActiveToken(newToken);
+        user.setActiveTokenExpiry(LocalDateTime.now().plusHours(24));
+        userRepository.save(user);
+
+        String activationLink = "http://localhost:5173/activate?token=" + newToken;
+
+        emailService.sendActivationEmail(
+                 user.getEmail(),
+                 "Gá»­i láº¡i: XÃ¡c thá»±c & KÃ­ch hoáº¡t tÃ i khoáº£n Há»‡ thá»‘ng VÄƒn báº±ng",
+                 user.getSchool().getSchoolName(),
+                 activationLink
+         );
+
+        return "ÄÃ£ gá»­i láº¡i email kÃ­ch hoáº¡t. Vui lÃ²ng kiá»ƒm tra há»™p thÆ° cá»§a báº¡n.";
+    }
+
+    public void forgotPassword(String email) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        otpService.sendOtp(user.getEmail());
+    }
+
+    public void verifyResetOtp(String email, String otp) {
+        if (otp == null || otp.isBlank()) throw new AppException(ErrorCode.OTP_INVALID);
+        otpService.verifyOtp(email, otp);
+    }
+
+    public void resetPassword(ForgotPasswordRequest request) {
+        // 1. Tá»± check Null cho 2 trÆ°á»ng máº­t kháº©u
+        if (request.getNewPassword() == null || request.getConfirmPassword() == null) {
+            throw new AppException(ErrorCode.PASSWORD_INVALID);
+        }
+
+        // 2. Check Confirm Password
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        // 3. Check OTP láº§n cuá»‘i
+        otpService.verifyOtp(request.getEmail(), request.getOtp());
+
+        // 4. LÆ°u DB
+        UserEntity user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        // 5. XÃ³a OTP
+        otpService.deleteOtp(request.getEmail());
     }
 }
 
@@ -2812,6 +3980,7 @@ import org.web3j.protocol.http.HttpService;
 import org.web3j.tuples.generated.Tuple12;
 import org.web3j.tx.Transfer;
 import org.web3j.tx.gas.DefaultGasProvider;
+import org.web3j.tx.gas.StaticGasProvider;
 import org.web3j.utils.Convert;
 
 import java.math.BigDecimal;
@@ -2918,12 +4087,17 @@ public class BlockchainService {
             List<String> majors,
             List<String> ipfsHashes
     ) {
+        // Äáº·t Gas Price (vÃ­ dá»¥ 20 Gwei) vÃ  Gas Limit cá»±c cao (10 triá»‡u)
+        BigInteger GAS_PRICE = BigInteger.valueOf(20_000_000_000L);
+        BigInteger GAS_LIMIT = BigInteger.valueOf(10_000_000L); // TÄ‚NG Sá» NÃ€Y LÃŠN
+
+        StaticGasProvider gasProvider = new StaticGasProvider(GAS_PRICE, GAS_LIMIT);
         try {
             // Táº O CREDENTIALS Báº°NG PRIVATE KEY Cá»¦A TRÆ¯á»œNG, KHÃ”NG PHáº¢I Cá»¦A ADMIN
             Credentials schoolCredentials = Credentials.create(schoolPrivateKey);
 
             CertificateRegistry registry = CertificateRegistry.load(
-                    contractAddress, web3j, schoolCredentials, new DefaultGasProvider()
+                    contractAddress, web3j, schoolCredentials,gasProvider
             );
 
             // Gá»i hÃ m issueCertificateBatch trong Smart Contract cá»§a báº¡n
@@ -3060,6 +4234,7 @@ import com.certificate.backend.repository.StudentRepository;
 import com.certificate.backend.utils.HashUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -3068,10 +4243,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 public class CertificateService {
-    private static final int BLOCKCHAIN_BATCH_LIMIT = 50;
+    private static final int BLOCKCHAIN_BATCH_LIMIT = 20;
 
     @Autowired
     private StudentRepository studentRepository;
@@ -3093,6 +4270,14 @@ public class CertificateService {
 
     @Autowired
     private WalletService walletService;
+    @Autowired
+    private AuditLogService auditLogService;
+    @Autowired
+    private EmailService emailService;
+
+    @Value("${app.base-url}")
+    private String baseUrl;
+
 
     @Transactional
     public void revokeCertificate(Long schoolId, Long studentId, String reason) {
@@ -3131,6 +4316,7 @@ public class CertificateService {
             certificate.setRevokedAt(LocalDateTime.now());
             certificate.setStatus("REVOKED");
             certificate.setRevokedReason(reason);
+            auditLogService.logAction(schoolId,"Thu há»“i vÄƒn báº±ng","Thu há»“i vÄƒn báº±ng "+degreeNo+"- LÃ½ do: "+ reason,school.getSchoolCode());
             certificateRepository.save(certificate);
 
             log.info("=== THU Há»’I THÃ€NH CÃ”NG VÄ‚N Báº°NG: {} ===", degreeNo);
@@ -3143,6 +4329,13 @@ public class CertificateService {
 
     // Cáº¥p báº±ng
     public IssueResponse issueCertificates(Long schoolId, IssueRequest request) {
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        // LÆ°u Ã½: Äá»•i getPrincipalName() thÃ nh getter tÆ°Æ¡ng á»©ng trong SchoolEntity cá»§a báº¡n (VD: getRectorName())
+        if (school.getRectorName() == null || school.getRectorName().trim().isEmpty()) {
+            throw new AppException(ErrorCode.PROFILE_INCOMPLETE);
+        }
         IssueResponse resultDto = IssueResponse.builder().build();
 
         List<StudentEntity> allStudents = studentRepository.findAllById(request.getStudentIds());
@@ -3209,7 +4402,7 @@ public class CertificateService {
             List<String> ipfsCids = readyItems.stream().map(i -> i.ipfsCid).toList();
 
             SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
-                    .orElseThrow(() -> new RuntimeException("KhÃ´ng tÃ¬m tháº¥y trÆ°á»ng"));
+                    .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
             String schoolPrivateKey = school.getPrivateKeyEncrypted();
             txHash = blockchainService.issueBatch(walletService.decryptPrivateKey(schoolPrivateKey),degreeNos, studentNames ,studentIds, degreeTypes,majors, ipfsCids);
@@ -3222,11 +4415,12 @@ public class CertificateService {
             return;
         }
 
-        saveChunkToDatabase(readyItems, txHash, resultDto);
+        saveChunkToDatabase(schoolId,readyItems, txHash, resultDto);
     }
 
     @Transactional
-    protected void saveChunkToDatabase(List<ChunkItem> items, String txHash, IssueResponse resultDto) {
+    protected void saveChunkToDatabase(Long schoolId,List<ChunkItem> items, String txHash, IssueResponse resultDto) {
+
         for (ChunkItem item : items) {
             try {
                 // LÆ°u vÃ o báº£ng Chá»©ng chá»‰
@@ -3246,11 +4440,46 @@ public class CertificateService {
                 studentRepository.save(item.student);
 
                 // Ghi nháº­n thÃ nh cÃ´ng
+
                 resultDto.addSuccess(item.student.getId(), item.degreeNo, item.ipfsCid, txHash);
+                String verifyLink = baseUrl + "/?certId=" + item.degreeNo;
+
+                if (item.student.getEmail() != null && !item.student.getEmail().isEmpty()) {
+                    // Äá»‹nh dáº¡ng ngÃ y sinh thÃ nh dd/MM/yyyy Ä‘á»ƒ hiá»ƒn thá»‹ trÃªn Email cho Ä‘áº¹p
+                    String formattedDob = "";
+                    if (item.student.getDob() != null) {
+                        try {
+                            // Thá»­ Ä‘á»‹nh dáº¡ng náº¿u dob lÃ  kiá»ƒu LocalDate/LocalDateTime cÃ´ng thá»©c chuáº©n
+                            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                            formattedDob = item.student.getDob().format(formatter);
+                        } catch (Exception e) {
+                            // Náº¿u dob cá»§a báº¡n Ä‘ang lÆ°u dáº¡ng String sáºµn thÃ¬ gÃ¡n tháº³ng luÃ´n
+                            formattedDob = item.student.getDob().toString();
+                        }
+                    }
+
+                    // Gá»i EmailService vá»›i Ä‘áº§y Ä‘á»§ 2 trÆ°á»ng má»›i bá»• sung
+                    emailService.sendCertificateIssuedEmail(
+                            item.student.getEmail(),
+                            item.student.getFullName(),
+                            item.student.getStudentId(), // Truyá»n MÃ£ sinh viÃªn (Vd: B22DCCN065)
+                            formattedDob,                // Truyá»n NgÃ y sinh (Vd: 21/05/2005)
+                            item.degreeNo,
+                            item.student.getMajor(),
+                            verifyLink
+                    );
+                }
             } catch (Exception e) {
                 resultDto.addFailure(item.student.getId(), "Lá»—i lÆ°u DB: " + e.getMessage());
             }
         }
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        auditLogService.logAction(
+                items.get(0).student.getSchool().getSchoolId(),
+                "Cáº¥p báº±ng",
+                "Cáº¥p báº±ng thÃ nh cÃ´ng cho "+resultDto.getSuccessCount()+" sinh viÃªn",school.getSchoolCode());
     }
 
     private <T> List<List<T>> partitionIntoChunks(List<T> list, int chunkSize) {
@@ -3326,7 +4555,7 @@ public class EmailService {
 
             // --- Cáº¤U HÃŒNH TÃŠN NGÆ¯á»œI Gá»¬I (SENDER NAME) ---
             // CÃº phÃ¡p: setFrom(Ä‘á»‹a_chá»‰_email, TÃªn_hiá»ƒn_thá»‹_báº±ng_tiáº¿ng_Viá»‡t)
-            helper.setFrom(systemEmail, "V-Cert");
+            helper.setFrom(systemEmail, "CertiChain");
 
             // 4. Cáº¥u hÃ¬nh ngÆ°á»i nháº­n vÃ  ná»™i dung
             helper.setTo(to);
@@ -3339,6 +4568,66 @@ public class EmailService {
 
         } catch (MessagingException | UnsupportedEncodingException e) {
             System.err.println("Lá»—i khi gá»­i email Ä‘áº¿n " + to + ": " + e.getMessage());
+        }
+    }
+
+    @Async // Váº«n cháº¡y ngáº§m Ä‘á»ƒ Frontend khÃ´ng bá»‹ chá» lÃ¢u
+    public void sendOtpEmail(String to, String otpCode) {
+        try {
+            // 1. Truyá»n mÃ£ OTP vÃ o file HTML
+            Context context = new Context();
+            context.setVariable("otpCode", otpCode);
+
+            // 2. Render file "email-otp.html" (chÃºng ta sáº½ táº¡o file nÃ y á»Ÿ bÆ°á»›c 2)
+            String htmlBody = templateEngine.process("email-otp", context);
+
+            // 3. Khá»Ÿi táº¡o Ä‘á»‘i tÆ°á»£ng ThÆ°
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            // Cáº¥u hÃ¬nh ngÆ°á»i gá»­i
+            helper.setFrom(systemEmail, "CertiChain Security");
+
+            // Cáº¥u hÃ¬nh ngÆ°á»i nháº­n vÃ  tiÃªu Ä‘á»
+            helper.setTo(to);
+            helper.setSubject("MÃ£ xÃ¡c nháº­n báº£o máº­t - Äá»•i Email há»‡ thá»‘ng");
+            helper.setText(htmlBody, true); // true = HTML format
+
+            // Ra lá»‡nh gá»­i
+            mailSender.send(message);
+            System.out.println("ÄÃ£ gá»­i email OTP thÃ nh cÃ´ng tá»›i: " + to);
+
+        } catch (MessagingException | UnsupportedEncodingException e) {
+            System.err.println("Lá»—i khi gá»­i email OTP Ä‘áº¿n " + to + ": " + e.getMessage());
+        }
+    }
+
+    @Async
+    public void sendCertificateIssuedEmail(String to, String studentName, String studentId, String dob, String degreeNo, String major, String verifyLink) {
+        try {
+            Context context = new Context();
+            context.setVariable("studentName", studentName);
+            context.setVariable("studentId", studentId);
+            context.setVariable("dob", dob);
+            context.setVariable("degreeNo", degreeNo);
+            context.setVariable("major", major);
+            context.setVariable("verifyLink", verifyLink);
+
+            String htmlBody = templateEngine.process("certificate-issued-email", context);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(systemEmail, "CertiChain System");
+            helper.setTo(to);
+            helper.setSubject("ThÃ´ng bÃ¡o: VÄƒn báº±ng cá»§a báº¡n Ä‘Ã£ Ä‘Æ°á»£c cáº¥p phÃ¡t thÃ nh cÃ´ng");
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            System.out.println("ÄÃ£ gá»­i email thÃ´ng bÃ¡o cáº¥p báº±ng tá»›i: " + to);
+
+        } catch (Exception e) {
+            System.err.println("Lá»—i khi gá»­i email thÃ´ng bÃ¡o cáº¥p báº±ng Ä‘áº¿n " + to + ": " + e.getMessage());
         }
     }
 }
@@ -3384,6 +4673,8 @@ public class ImportStudentService {
 
     @Autowired
     private SchoolRepository schoolRepository;
+    @Autowired
+    private AuditLogService auditLogService;
 
     @Autowired
     private Validator validator;
@@ -3392,8 +4683,8 @@ public class ImportStudentService {
             DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     @Transactional
-    public ImportResultDto importStudents(MultipartFile file, long userId) throws Exception {
-        SchoolEntity school = schoolRepository.findByUserId(userId)
+    public ImportResultDto importStudents(MultipartFile file, Long schoolId) throws Exception {
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
                 .orElseThrow(() -> new AppException(
                         ErrorCode.SCHOOL_NOT_FOUND,
                         "KhÃ´ng tÃ¬m tháº¥y trÆ°á»ng há»c!"));
@@ -3445,6 +4736,7 @@ public class ImportStudentService {
         studentRepository.saveAll(validEntities);
 
         ImportResultDto importResultDto = new ImportResultDto(dtoList.size(),validEntities.size(),rowErrors);
+        auditLogService.logAction(schoolId,"ThÃªm sinh viÃªn","ThÃªm thÃ nh cÃ´ng"+importResultDto.getSuccessCount()+" sinh viÃªn vÃ o há»‡ thá»‘ng",school.getSchoolCode());
         return importResultDto;
 
     }
@@ -3466,6 +4758,7 @@ public class ImportStudentService {
                 dto.setMajor(getCellValue(row.getCell(4), formatter));
                 dto.setDegreeType(getCellValue(row.getCell(5), formatter));
                 dto.setTrainingType(getCellValue(row.getCell(6), formatter));
+                dto.setEmail(getCellValue(row.getCell(7), formatter));
                 result.add(dto);
             }
             return result;
@@ -3483,6 +4776,7 @@ public class ImportStudentService {
         entity.setMajor(dto.getMajor());
         entity.setDegreeType(dto.getDegreeType());
         entity.setTrainingType(dto.getTrainingType());
+        entity.setEmail(dto.getEmail());
         entity.setSchool(school);
         return entity;
     }
@@ -3667,6 +4961,82 @@ public class IpfsService {
 
 
 ========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\OtpService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.enums.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+import org.springframework.stereotype.Service;
+
+
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
+
+@Service
+@RequiredArgsConstructor
+public class OtpService {
+    private final StringRedisTemplate redisTemplate;
+
+    private final EmailService emailService;
+
+    private static final String REDIS_OTP_PREFIX = "OTP_SENT_EMAIL:";
+    private static final String REDIS_COOLDOWN_PREFIX = "OTP_COOLDOWN:";
+    private static final int OTP_EXPIRY_MINUTES= 3;
+    private static final int COOLDOWN_SECONDS = 60;
+
+    public void sendOtp(String currentEmail) {
+
+        // 1. KIá»‚M TRA SPAM (COOLDOWN LOCK) TRÆ¯á»šC TIÃŠN
+        String cooldownKey = REDIS_COOLDOWN_PREFIX + currentEmail;
+        Long expireTime = redisTemplate.getExpire(cooldownKey, TimeUnit.SECONDS);
+
+        if (expireTime != null && expireTime > 0) {
+            throw new RuntimeException("Báº¡n thao tÃ¡c quÃ¡ nhanh. Vui lÃ²ng Ä‘á»£i " + expireTime + " giÃ¢y ná»¯a Ä‘á»ƒ gá»­i láº¡i mÃ£ má»›i!");
+        }
+        // Táº¡o OTP ngáº«u nhiÃªn
+        String otp = String.format("%06d", new Random().nextInt(999999));
+
+        // LÆ°u vÃ o Redis (Upstash)
+        String redisKey = REDIS_OTP_PREFIX + currentEmail;
+        redisTemplate.opsForValue().set(redisKey, otp, OTP_EXPIRY_MINUTES, TimeUnit.MINUTES);
+
+        // 4. LÆ¯U KHÃ“A CHá»NG SPAM (KhÃ³a 60 giÃ¢y)
+        redisTemplate.opsForValue().set(cooldownKey, "LOCKED", COOLDOWN_SECONDS, TimeUnit.SECONDS);
+        // Gá»i EmailService gá»­i HTML xá»‹n xÃ²
+        emailService.sendOtpEmail(currentEmail, otp);
+    }
+
+    public void verifyOtp(String currentEmail, String inputOtp) {
+
+        String redisKey = REDIS_OTP_PREFIX + currentEmail;
+
+        // Láº¥y OTP tá»« Redis
+        String cachedOtp = redisTemplate.opsForValue().get(redisKey);
+
+        if (cachedOtp == null) {
+            throw new AppException(ErrorCode.OTP_EXPIRED);
+        }
+
+        if (!cachedOtp.equals(inputOtp)) {
+            throw new AppException(ErrorCode.OTP_INVALID);
+        }
+
+    }
+
+    public void deleteOtp(String email) {
+        redisTemplate.delete(REDIS_OTP_PREFIX + email);
+    }
+
+}
+
+
+
+========================================
 FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\PdfExportService.java
 ========================================
 
@@ -3678,6 +5048,7 @@ import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import com.lowagie.text.pdf.BaseFont;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
@@ -3700,8 +5071,8 @@ public class PdfExportService {
     @Autowired
     private TranslationService translationService;
 
-    // TODO: Thay báº±ng link Ngrok thá»±c táº¿ cá»§a báº¡n khi cháº¡y (vÃ­ dá»¥: ngrok http 3000)
-    private final String NGROK_BASE_URL = "https://abcd-1234.ngrok-free.app";
+    @Value("${app.base-url}")
+    private String baseUrl;
 
     // Truyá»n thÃªm degreeNo vÃ  regNo tá»« hÃ m Cáº¥p Báº±ng vÃ o Ä‘Ã¢y
     public byte[] generatePdfBytes(StudentEntity student, String certId, String regNo) throws Exception {
@@ -3715,7 +5086,7 @@ public class PdfExportService {
         context.setVariable("regNo", regNo);
 
         // Táº¡o QR Code dáº«n tá»›i link Ngrok
-        String verifyUrl = NGROK_BASE_URL + "/verify?degreeNo=" + certId;
+        String verifyUrl = baseUrl + "/?certId=" + certId;
         context.setVariable("qrBase64", generateQRCodeBase64(verifyUrl));
 
 
@@ -3773,6 +5144,441 @@ public class PdfExportService {
         MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
         return Base64.getEncoder().encodeToString(pngOutputStream.toByteArray());
     }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\SchoolDashboardService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.entity.CertificateEntity;
+import com.certificate.backend.model.dto.Response.SchoolDashboardDto;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.enums.ErrorCode;
+import com.certificate.backend.repository.CertificateRepository;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.repository.StudentRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class SchoolDashboardService {
+
+    private final StudentRepository studentRepository;
+    private final CertificateRepository certificateRepository;
+    private final SchoolRepository schoolRepository;
+
+    public SchoolDashboardDto getDashboardData(String username) {
+        SchoolEntity school = schoolRepository.findByUser_UserName(username)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        Long schoolId = school.getSchoolId();
+        // 1. Láº¤Y THá»NG KÃŠ 4 THáºº TRÃŠN CÃ™NG
+        long totalStudents = studentRepository.countBySchool_SchoolId(schoolId);
+        long pendingStudents = studentRepository.countBySchool_SchoolIdAndStatus(schoolId, 0); // Hoáº·c logic Ä‘áº¿m khÃ¡c cá»§a báº¡n
+        long issuedCerts = certificateRepository.countBySchool_SchoolIdAndStatus(schoolId, "ISSUED");
+        long revokedCerts = certificateRepository.countBySchool_SchoolIdAndStatus(schoolId, "REVOKED");
+
+        // 2. Láº¤Y Dá»® LIá»†U BIá»‚U Äá»’ TRÃ’N (CHUYÃŠN NGÃ€NH)
+        // CODE Má»šI (Chá»‰ Ä‘áº¿m cÃ¡c báº±ng Ä‘Ã£ cáº¥p)
+        List<Object[]> majorData = certificateRepository.countIssuedCertificatesByMajor(schoolId);
+        List<SchoolDashboardDto.MajorChart> majorChart = majorData.stream()
+                .map(obj -> SchoolDashboardDto.MajorChart.builder()
+                        .name((String) obj[0])
+                        .value((Long) obj[1])
+                        .build())
+                .collect(Collectors.toList());
+
+        // 3. Láº¤Y Dá»® LIá»†U BIá»‚U Äá»’ Cá»˜T (THEO 5 THÃNG Gáº¦N NHáº¤T Cá»¦A NÄ‚M NAY)
+        List<SchoolDashboardDto.MonthlyChart> monthlyChart = generateMonthlyChart(schoolId);
+
+        // 4. Láº¤Y Lá»ŠCH Sá»¬ GIAO Dá»ŠCH VÃ€ Xá»¬ LÃ "10 PHÃšT TRÆ¯á»šC"
+        List<SchoolDashboardDto.RecentActivity> recentActivities = getRecentActivities(schoolId);
+
+        // 5. TRáº¢ Vá»€ JSON HOÃ€N CHá»ˆNH
+        return SchoolDashboardDto.builder()
+                .totalStudents(totalStudents)
+                .issuedCertificates(issuedCerts)
+                .revokedCertificates(revokedCerts)
+                .pendingStudents(pendingStudents)
+                .majorChart(majorChart)
+                .monthlyChart(monthlyChart)
+                .recentActivities(recentActivities)
+                .build();
+    }
+
+    // ============ CÃC HÃ€M Xá»¬ LÃ PHá»¤ TRá»¢ (HELPER METHODS) ============
+
+    // HÃ m xá»­ lÃ½ Báº£ng giao dá»‹ch gáº§n Ä‘Ã¢y
+    private List<SchoolDashboardDto.RecentActivity> getRecentActivities(Long schoolId) {
+        // Gá»i hÃ m má»›i: láº¥y theo updatedAt giáº£m dáº§n
+        List<CertificateEntity> recentCerts = certificateRepository.findTop5BySchool_SchoolIdOrderByUpdatedAtDesc(schoolId);
+
+        return recentCerts.stream().map(cert ->
+                SchoolDashboardDto.RecentActivity.builder()
+                        .id("TX-" + cert.getCertId())
+                        // CHá»ˆ Cáº¦N Láº¤Y updatedAt Äá»‚ TÃNH THá»œI GIAN, Cá»°C Ká»² NHÃ€N!
+                        .time(calculateRelativeTime(cert.getUpdatedAt()))
+                        .action("ISSUED".equals(cert.getStatus()) ? "Cáº¥p phÃ¡t vÄƒn báº±ng" : "Thu há»“i vÄƒn báº±ng")
+                        .student(cert.getStudent().getFullName())
+                        .status("ISSUED".equals(cert.getStatus()) ? "SUCCESS" : "REVOKED")
+                        .hash(cert.getTxHash() != null ? cert.getTxHash() : "ChÆ°a cÃ³ Hash")
+                        .build()
+        ).collect(Collectors.toList());
+    }
+
+    // HÃ m thuáº­t toÃ¡n Ä‘á»•i DateTime ra "10 phÃºt trÆ°á»›c", "2 giá» trÆ°á»›c"...
+    private String calculateRelativeTime(LocalDateTime pastTime) {
+        if (pastTime == null) return "Vá»«a xong";
+
+        LocalDateTime now = LocalDateTime.now();
+        long minutes = ChronoUnit.MINUTES.between(pastTime, now);
+
+        if (minutes < 1) return "Vá»«a xong";
+        if (minutes < 60) return minutes + " phÃºt trÆ°á»›c";
+
+        long hours = ChronoUnit.HOURS.between(pastTime, now);
+        if (hours < 24) return hours + " giá» trÆ°á»›c";
+
+        long days = ChronoUnit.DAYS.between(pastTime, now);
+        if (days <= 30) return days + " ngÃ y trÆ°á»›c";
+
+        // Náº¿u quÃ¡ 30 ngÃ y thÃ¬ tráº£ vá» thÃ¡ng
+        long months = ChronoUnit.MONTHS.between(pastTime, now);
+        return months + " thÃ¡ng trÆ°á»›c";
+    }
+
+    // HÃ m xá»­ lÃ½ biá»ƒu Ä‘á»“ Cá»™t (Chia theo thÃ¡ng)
+    private List<SchoolDashboardDto.MonthlyChart> generateMonthlyChart(Long schoolId) {
+        List<CertificateEntity> allCerts = certificateRepository.findAllBySchoolThisYear(schoolId);
+        List<SchoolDashboardDto.MonthlyChart> chart = new ArrayList<>();
+
+        // Láº·p tá»« thÃ¡ng 1 Ä‘áº¿n thÃ¡ng hiá»‡n táº¡i (Hoáº·c láº¥y Ä‘Ãºng 5 thÃ¡ng lÃ¹i láº¡i)
+        int currentMonth = LocalDateTime.now().getMonthValue();
+        int startMonth = Math.max(1, currentMonth - 4); // Láº¥y 5 thÃ¡ng gáº§n nháº¥t
+
+        for (int i = startMonth; i <= currentMonth; i++) {
+            final int month = i;
+            // Äáº¿m sá»‘ báº±ng ISSUED trong thÃ¡ng
+            long issued = allCerts.stream()
+                    .filter(c -> c.getIssueDate() != null && c.getIssueDate().getMonthValue() == month && "ISSUED".equals(c.getStatus()))
+                    .count();
+
+            // Äáº¿m sá»‘ báº±ng REVOKED trong thÃ¡ng
+            long revoked = allCerts.stream()
+                    .filter(c -> c.getRevokedAt() != null && c.getRevokedAt().getMonthValue() == month && "REVOKED".equals(c.getStatus()))
+                    .count();
+
+            chart.add(SchoolDashboardDto.MonthlyChart.builder()
+                    .name("Th." + month)
+                    .issued(issued)
+                    .revoked(revoked)
+                    .build());
+        }
+        return chart;
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\SchoolService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.exception.AppException;
+import com.certificate.backend.model.dto.Request.UpdateProfileRequest;
+import com.certificate.backend.model.dto.Response.*;
+import com.certificate.backend.model.entity.AuditLogEntity;
+import com.certificate.backend.model.entity.CertificateEntity;
+import com.certificate.backend.model.entity.SchoolEntity;
+import com.certificate.backend.model.entity.UserEntity;
+import com.certificate.backend.model.enums.ErrorCode;
+import com.certificate.backend.model.enums.SchoolStatus;
+import com.certificate.backend.repository.AuditLogRepository;
+import com.certificate.backend.repository.CertificateRepository;
+import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.repository.StudentRepository;
+import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+import java.text.DecimalFormat;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+// ADMIN
+@Service
+public class SchoolService {
+    @Autowired
+    private SchoolRepository schoolRepository;
+
+    @Autowired
+    private CertificateRepository certificateRepository;
+    @Autowired
+    private StudentRepository studentRepository;
+    @Autowired
+    private AuditLogRepository auditLogRepository;
+    @Autowired
+    private AuditLogService auditLogService;
+
+   public PageAdminDto<SchoolDto> getSchools(String keyword, String status, int page, int size){
+       // Chuyá»ƒn trang cá»§a Frontend (báº¯t Ä‘áº§u tá»« 1) sang Spring Data (báº¯t Ä‘áº§u tá»« 0)
+       Pageable pageable = PageRequest.of(page - 1, size);
+
+       // Xá»­ lÃ½ logic lá»c
+       String actualStatus = "ALL".equalsIgnoreCase(status) ? null : status;
+       String actualKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
+
+       // Gá»i DB
+       Page<SchoolEntity> schoolPage = schoolRepository.searchAndFilterSchools(actualKeyword, actualStatus, pageable);
+
+        List<SchoolDto> dtoList = schoolPage.getContent().stream()
+                .map(entity -> SchoolDto.builder()
+                        .id(entity.getSchoolId())
+                        .schoolCode(entity.getSchoolCode())
+                        .schoolName(entity.getSchoolName())
+                        .schoolEmail(entity.getUser().getEmail())
+                        .schoolAddress(entity.getAddress())
+                        .status(entity.getStatus())
+                        .totalIssued(0)
+                        .totalRevoked(0)
+                        .build()
+                ).toList();
+
+       // ÄÃ³ng gÃ³i vÃ o PageResponse
+       return PageAdminDto.<SchoolDto>builder()
+               .items(dtoList)
+               .currentPage(page)
+               .totalPages(schoolPage.getTotalPages())
+               .totalItems(schoolPage.getTotalElements())
+               .build();
+
+   }
+
+    public DashboardStatsDto getDashboardStats() {
+        // Láº¥y con sá»‘ tá»•ng quan
+        long pending = schoolRepository.countByStatus(SchoolStatus.PENDING);
+        long approved = schoolRepository.countByStatus(SchoolStatus.APPROVED);
+        long totalCerts = certificateRepository.count(); // Tá»•ng toÃ n bá»™ chá»©ng chá»‰
+
+        Map<String, Long> stats = new HashMap<>();
+        stats.put("pendingSchools", pending);
+        stats.put("approvedSchools", approved);
+        stats.put("totalCerts", totalCerts);
+
+        // Láº¥y dá»¯ liá»‡u biá»ƒu Ä‘á»“ (6 thÃ¡ng gáº§n nháº¥t)
+        List<ChartData> chartData = new ArrayList<>();
+        YearMonth currentMonth = YearMonth.now();
+
+        // Cháº¡y vÃ²ng láº·p tá»« 5 thÃ¡ng trÆ°á»›c Ä‘áº¿n thÃ¡ng hiá»‡n táº¡i
+        for (int i = 5; i >= 0; i--) {
+            YearMonth targetMonth = currentMonth.minusMonths(i);
+            int month = targetMonth.getMonthValue();
+            int year = targetMonth.getYear();
+
+            // Gá»i repository Ä‘á»ƒ Ä‘áº¿m
+            long count = certificateRepository.countCertificatesByMonthAndYear(month, year);
+
+            // Format tÃªn hiá»ƒn thá»‹, vÃ­ dá»¥: "T5"
+            chartData.add(new ChartData("T" + month, count));
+        }
+
+        return DashboardStatsDto.builder()
+                .stats(stats)
+                .chart(chartData)
+                .build();
+    }
+
+    public SchoolAnalyticsDto getSchoolAnalytics(Long schoolId) {
+
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        UserEntity user = school.getUser();
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+        // KHá»I 1: INFO (THÃ”NG TIN CHUNG & TÃ€I KHOáº¢N)
+        SchoolAnalyticsDto.InfoDTO info = SchoolAnalyticsDto.InfoDTO.builder()
+                .schoolName(school.getSchoolName())
+                .schoolCode(school.getSchoolCode())
+                .status(school.getStatus().getStatusName())
+                .schoolAddress(school.getAddress() != null ? school.getAddress() : "ChÆ°a cáº­p nháº­t")
+                .schoolEmail(user.getEmail())
+                .walletAddress(school.getWalletAddress() != null ? school.getWalletAddress() : "0xChuaCapNhatViBlockchain")
+                .blockchainStatus("Äang hoáº¡t Ä‘á»™ng (ÄÃ£ káº¿t ná»‘i Node)")
+                .createdAt(user.getCreatedAt() != null ? user.getCreatedAt().format(dateFormatter) : "ChÆ°a rÃµ")
+                .approvedBy("admin@system.vn")
+                .approvedAt("ChÆ°a rÃµ")
+                .lastLogin(user.getLastLogin() != null ? user.getLastLogin().format(dateFormatter) : "ChÆ°a rÃµ")
+                .build();
+
+        // KHá»I 2: STATS (4 THáºº Sá» LIá»†U Tá»”NG QUAN)
+        long totalStudents = studentRepository.countBySchool_SchoolId(school.getSchoolId());
+        long totalIssued = certificateRepository.countBySchool_SchoolIdAndStatus(school.getSchoolId(), "ISSUED");
+        long totalRevoked = certificateRepository.countBySchool_SchoolIdAndStatus(school.getSchoolId(), "REVOKED");
+        long totalCerts = totalIssued + totalRevoked;
+
+        String revocationRate = "0%";
+        if (totalCerts > 0) {
+            double rate = ((double) totalRevoked / totalCerts) * 100;
+            revocationRate = String.format("%.2f", rate) + "%";
+        }
+
+        DecimalFormat df = new DecimalFormat("#,###");
+        SchoolAnalyticsDto.StatsDTO stats = SchoolAnalyticsDto.StatsDTO.builder()
+                .totalStudents(df.format(totalStudents).replace(',', '.'))
+                .totalIssued(df.format(totalIssued).replace(',', '.'))
+                .totalRevoked(df.format(totalRevoked).replace(',', '.'))
+                .revocationRate(revocationRate)
+                .build();
+
+        // KHá»I 3: ANALYTICS (Dá»® LIá»†U 2 BIá»‚U Äá»’ TAB 2)
+
+        List<CertificateEntity> allCerts = certificateRepository.findBySchool_SchoolId(school.getSchoolId());
+
+        // 3.1 Biá»ƒu Ä‘á»“ TrÃ²n
+        Map<String, Long> majorCount = allCerts.stream()
+                .filter(c -> c.getStudent().getMajor() != null)
+                .filter(c -> "ISSUED".equals(c.getStatus())) // Lá»c báº±ng Ä‘Ã£ cáº¥p nhÆ° báº¡n Ä‘Ã£ xÃ¡c nháº­n lÃºc trÆ°á»›c
+                .collect(Collectors.groupingBy(c -> c.getStudent().getMajor(), Collectors.counting()));
+
+        List<SchoolAnalyticsDto.MajorData> majorData = majorCount.entrySet().stream()
+                .map(entry -> SchoolAnalyticsDto.MajorData.builder()
+                        .name(entry.getKey())
+                        .value(entry.getValue())
+                        .build())
+                .collect(Collectors.toList());
+
+        // 3.2 Biá»ƒu Ä‘á»“ Cá»™t
+        int[] monthlyCounts = new int[12];
+        int currentYear = java.time.LocalDate.now().getYear();
+
+        for (CertificateEntity cert : allCerts) {
+            if (cert.getIssueDate() != null && cert.getIssueDate().getYear() == currentYear) {
+                int monthIndex = cert.getIssueDate().getMonthValue() - 1;
+                monthlyCounts[monthIndex]++;
+            }
+        }
+
+        List<SchoolAnalyticsDto.MonthlyData> monthlyData = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            monthlyData.add(SchoolAnalyticsDto.MonthlyData.builder()
+                    .name("Thg " + (i + 1))
+                    .issued(monthlyCounts[i])
+                    .build());
+        }
+
+        SchoolAnalyticsDto.AnalyticsDTO analytics = SchoolAnalyticsDto.AnalyticsDTO.builder()
+                .majorData(majorData)
+                .monthlyData(monthlyData)
+                .build();
+
+        // KHá»I 4: LOGS (NHáº¬T KÃ HOáº T Äá»˜NG TAB 3)
+        List<AuditLogEntity> logEntities = auditLogRepository.findTop20BySchool_SchoolIdOrderByCreatedAtDesc(school.getSchoolId());
+
+        List<SchoolAnalyticsDto.LogDTO> logs = logEntities.stream()
+                .map(log -> SchoolAnalyticsDto.LogDTO.builder()
+                        .id(log.getId())
+                        .time(log.getCreatedAt() != null ? log.getCreatedAt().format(timeFormatter) : "")
+                        .action(log.getActionType())
+                        .user(log.getPerformedBy())
+                        .desc(log.getDescription())
+                        .build())
+                .collect(Collectors.toList());
+
+        // TRáº¢ Vá»€ DUY NHáº¤T 1 OBJECT Tá»”NG Há»¢P (THAY CHO MAP)
+        return SchoolAnalyticsDto.builder()
+                .info(info)
+                .stats(stats)
+                .analytics(analytics)
+                .logs(logs)
+                .build();
+    }
+
+    public ProfileResponseDto getSchoolProfile(String username){
+        SchoolEntity school = schoolRepository.findByUser_UserName(username)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        return ProfileResponseDto.builder()
+                .schoolName(school.getSchoolName())
+                .email(school.getUser().getEmail())
+                .address(school.getAddress())
+                .schoolCode(school.getSchoolCode())
+                .rectorName(school.getRectorName())
+                .build();
+    }
+
+    @Transactional
+    public ProfileResponseDto updateProfile(String username, UpdateProfileRequest req){
+        SchoolEntity school = schoolRepository.findByUser_UserName(username)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        school.setAddress(req.getAddress());
+        school.setRectorName(req.getRectorName());
+        auditLogService.logAction(school.getSchoolId(),"Cáº­p nháº­t há»“ sÆ¡","NhÃ  trÆ°á»ng Ä‘Ã£ cáº­p nháº­t há»“ sÆ¡ cá»§a há»",school.getSchoolCode());
+        schoolRepository.save(school);
+        return new ProfileResponseDto(
+                school.getSchoolCode(),
+                school.getSchoolName(),
+                school.getUser().getEmail(),
+                school.getAddress(),
+                school.getRectorName()
+        );
+    }
+}
+
+
+
+========================================
+FILE: D:\Documents\certificate-project\backend\src\main\java\com\certificate\backend\service\StudentService.java
+========================================
+
+package com.certificate.backend.service;
+
+import com.certificate.backend.model.dto.Request.IssueRequest;
+import com.certificate.backend.model.dto.Response.ImportResultDto;
+import com.certificate.backend.model.dto.Response.IssueResponse;
+import com.certificate.backend.model.dto.Response.PageResponseDto;
+import com.certificate.backend.model.dto.Response.StudentResponseDto;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+
+public interface StudentService {
+    PageResponseDto<StudentResponseDto> getStudents(
+            String username, int page, int size, String search,String major, String status);
+
+    // 2. Import Excel
+    ImportResultDto importStudentsFromExcel(MultipartFile file, Long schoolId) throws Exception;
+
+    // 3. Khá»›p chuáº©n kiá»ƒu IssueRequest vÃ  IssueResponse thá»±c táº¿ cá»§a báº¡n
+    IssueResponse issueCertificates(Long schoolId, IssueRequest request);
+
+    // 4. Thu há»“i vÄƒn báº±ng
+    void revokeCertificate(Long schoolId, Long studentId, String reason);
 }
 
 
@@ -3907,7 +5713,6 @@ public class VerifyService {
     @Value("${pinata.gateway.url}")
     private String ipfsGatewayUrl;
 
-
     public SearchResponse search(SearchRequest req){
         CertificateEntity certificate = certificateRepository.findByCertId(req.getCertId())
                 .orElseThrow(()-> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND));
@@ -3921,7 +5726,9 @@ public class VerifyService {
         if (!inputName.equals(dbName) && !req.getDob().equals(dbDob)){
             throw new AppException(ErrorCode.CERTIFICATE_NOT_FOUND);
         }
-        return searchBlockchain(certificate.getCertId(), student, dbDob);
+
+        // Truyá»n tháº³ng Ä‘á»‘i tÆ°á»£ng CertificateEntity thay vÃ¬ chá»‰ truyá»n certId
+        return searchBlockchain(certificate, student, dbDob);
     }
 
     public SearchResponse verify(MultipartFile file) {
@@ -3937,8 +5744,8 @@ public class VerifyService {
                     .orElseThrow(() -> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND,
                             "Cáº¢NH BÃO: File vÄƒn báº±ng nÃ y lÃ  GIáº¢ Máº O hoáº·c ÄÃƒ Bá»Š CHá»ˆNH Sá»¬A!"));
 
-            // 4. Náº¿u tÃ¬m tháº¥y (Hash trÃ¹ng khá»›p 100%), láº¥y certId chá»c lÃªn Blockchain
-            return searchBlockchain(certInDb.getCertId(), certInDb.getStudent(),
+            // 4. Truyá»n tháº³ng Ä‘á»‘i tÆ°á»£ng certInDb vÃ o hÃ m xá»­ lÃ½
+            return searchBlockchain(certInDb, certInDb.getStudent(),
                     certInDb.getStudent().getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
 
         } catch (AppException e) {
@@ -3949,14 +5756,27 @@ public class VerifyService {
         }
     }
 
+    public SearchResponse scan(String certId) {
+        CertificateEntity certificate = certificateRepository.findByCertId(certId)
+                .orElseThrow(() -> new AppException(ErrorCode.CERTIFICATE_NOT_FOUND));
+
+        StudentEntity student = certificate.getStudent();
+        String dobStr = student.getDob().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+
+        // TÃ¡i dá»¥ng luÃ´n hÃ m searchBlockchain cÃ³ sáºµn
+        return searchBlockchain(certificate, student, dobStr);
+    }
+
     // HÃ m phá»¥ trá»£ chá»‘ng lá»—i NullPointerException (NPE)
     private String getSafeString(Map<String, Object> map, String key) {
         Object value = map.get(key);
-        return value != null ? value.toString() : ""; // Náº¿u null thÃ¬ tráº£ vá» chuá»—i rá»—ng thay vÃ¬ bÃ¡o lá»—i
+        return value != null ? value.toString() : "";
     }
 
-    private SearchResponse searchBlockchain(String certId, StudentEntity student, String dobStr){
-        var blockchainInfo = blockchainService.getCertificate(certId);
+    // Äá»•i tham sá»‘ Ä‘áº§u tiÃªn tá»« String certId -> CertificateEntity certificate
+    private SearchResponse searchBlockchain(CertificateEntity certificate, StudentEntity student, String dobStr){
+        // Láº¥y thÃ´ng tin tá»« Smart Contract thÃ´ng qua certId
+        var blockchainInfo = blockchainService.getCertificate(certificate.getCertId());
 
         if (blockchainInfo == null) {
             throw new AppException(ErrorCode.CERTIFICATE_NOT_FOUND, "Báº±ng khÃ´ng tá»“n táº¡i trÃªn Blockchain!");
@@ -3968,18 +5788,21 @@ public class VerifyService {
         res.setDob(dobStr);
         res.setClassification(getSafeString(blockchainInfo, "degreeType"));
 
-        // KIá»‚M TRA TRáº NG THÃI: TÃ¹y theo key báº¡n lÆ°u á»Ÿ BlockchainService (isRevoked hay isValid)
+        // KIá»‚M TRA TRáº NG THÃI Tá»ª BLOCKCHAIN
         boolean isRevoked = (Boolean) blockchainInfo.get("isRevoked");
         res.setStatus(isRevoked ? "REVOKED" : "VALID");
+
         if(!isRevoked){
             String ipfsHash = getSafeString(blockchainInfo, "ipfsHash");
             String gateway = ipfsGatewayUrl.endsWith("/") ? ipfsGatewayUrl : ipfsGatewayUrl + "/";
             res.setIpfsUrl(gateway + ipfsHash);
+        } else {
+            // Láº¥y lÃ½ do thu há»“i tá»« Database vÃ  gÃ¡n vÃ o Response DTO
+            res.setReasonRevoked(certificate.getRevokedReason());
         }
 
         return res;
     }
-
 }
 
 
@@ -4164,7 +5987,7 @@ wallet.encryption.key=MySecretKeyForWalletEncryption19
 
 
 jwt.secret=HuyLe_my-super-secret-key-for-jwt-token-256-bit-long
-jwt.access.expiration=1800000       
+jwt.access.expiration=900000       
 jwt.refresh.expiration=604800000  
 
 pinata.jwt = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiIxMzU4MDRmZS0xMDIzLTRmMWMtOGEwNS05MTRmZTU0NTUyNDIiLCJlbWFpbCI6Imh1eWxlMTkwMjJAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBpbl9wb2xpY3kiOnsicmVnaW9ucyI6W3siZGVzaXJlZFJlcGxpY2F0aW9uQ291bnQiOjEsImlkIjoiRlJBMSJ9LHsiZGVzaXJlZFJlcGxpY2F0aW9uQ291bnQiOjEsImlkIjoiTllDMSJ9XSwidmVyc2lvbiI6MX0sIm1mYV9lbmFibGVkIjpmYWxzZSwic3RhdHVzIjoiQUNUSVZFIn0sImF1dGhlbnRpY2F0aW9uVHlwZSI6InNjb3BlZEtleSIsInNjb3BlZEtleUtleSI6IjlmODNjMmZkMGFkZWQ0ZTM3M2JjIiwic2NvcGVkS2V5U2VjcmV0IjoiMmEwZWEyMGQyNGNkMTZlMzJlZjAzODNkNDhmNGJjOTEzOGViZTIwZDUwYWQ3MWM0YjU2NThmOWViZTY4OTkzYSIsImV4cCI6MTgwOTY4NzE4Nn0.yhY1jWUSF8ZhypWDuspOgP6x_DRAAn2ZIn_sHl1XjXQ
@@ -4189,6 +6012,8 @@ spring.data.redis.host=oriented-antelope-101535.upstash.io
 spring.data.redis.port=6379
 spring.data.redis.password=gQAAAAAAAYyfAAIgcDIzZjQ1NTgxZDYxNzg0NzNhYmE5YjU1MTc1NWU3NmZhOQ
 spring.data.redis.ssl.enabled=true
+#ngrok
+app.base-url=    https://ladder-sharpie-drab.ngrok-free.dev
 
 
 
@@ -4238,7 +6063,7 @@ wallet.encryption.key=MySecretKeyForWalletEncryption19
 
 
 jwt.secret=HuyLe_my-super-secret-key-for-jwt-token-256-bit-long
-jwt.access.expiration=1800000       
+jwt.access.expiration=900000       
 jwt.refresh.expiration=604800000  
 
 pinata.jwt = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiIxMzU4MDRmZS0xMDIzLTRmMWMtOGEwNS05MTRmZTU0NTUyNDIiLCJlbWFpbCI6Imh1eWxlMTkwMjJAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBpbl9wb2xpY3kiOnsicmVnaW9ucyI6W3siZGVzaXJlZFJlcGxpY2F0aW9uQ291bnQiOjEsImlkIjoiRlJBMSJ9LHsiZGVzaXJlZFJlcGxpY2F0aW9uQ291bnQiOjEsImlkIjoiTllDMSJ9XSwidmVyc2lvbiI6MX0sIm1mYV9lbmFibGVkIjpmYWxzZSwic3RhdHVzIjoiQUNUSVZFIn0sImF1dGhlbnRpY2F0aW9uVHlwZSI6InNjb3BlZEtleSIsInNjb3BlZEtleUtleSI6IjlmODNjMmZkMGFkZWQ0ZTM3M2JjIiwic2NvcGVkS2V5U2VjcmV0IjoiMmEwZWEyMGQyNGNkMTZlMzJlZjAzODNkNDhmNGJjOTEzOGViZTIwZDUwYWQ3MWM0YjU2NThmOWViZTY4OTkzYSIsImV4cCI6MTgwOTY4NzE4Nn0.yhY1jWUSF8ZhypWDuspOgP6x_DRAAn2ZIn_sHl1XjXQ
@@ -4263,6 +6088,8 @@ spring.data.redis.host=oriented-antelope-101535.upstash.io
 spring.data.redis.port=6379
 spring.data.redis.password=gQAAAAAAAYyfAAIgcDIzZjQ1NTgxZDYxNzg0NzNhYmE5YjU1MTc1NWU3NmZhOQ
 spring.data.redis.ssl.enabled=true
+#ngrok
+app.base-url=    https://ladder-sharpie-drab.ngrok-free.dev
 
 
 

@@ -88,4 +88,33 @@ public class EmailService {
             System.err.println("Lỗi khi gửi email OTP đến " + to + ": " + e.getMessage());
         }
     }
+
+    @Async
+    public void sendCertificateIssuedEmail(String to, String studentName, String studentId, String dob, String degreeNo, String major, String verifyLink) {
+        try {
+            Context context = new Context();
+            context.setVariable("studentName", studentName);
+            context.setVariable("studentId", studentId);
+            context.setVariable("dob", dob);
+            context.setVariable("degreeNo", degreeNo);
+            context.setVariable("major", major);
+            context.setVariable("verifyLink", verifyLink);
+
+            String htmlBody = templateEngine.process("certificate-issued-email", context);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(systemEmail, "CertiChain System");
+            helper.setTo(to);
+            helper.setSubject("Thông báo: Văn bằng của bạn đã được cấp phát thành công");
+            helper.setText(htmlBody, true);
+
+            mailSender.send(message);
+            System.out.println("Đã gửi email thông báo cấp bằng tới: " + to);
+
+        } catch (Exception e) {
+            System.err.println("Lỗi khi gửi email thông báo cấp bằng đến " + to + ": " + e.getMessage());
+        }
+    }
 }

@@ -13,6 +13,7 @@ import com.certificate.backend.repository.StudentRepository;
 import com.certificate.backend.utils.HashUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,12 @@ public class CertificateService {
     private WalletService walletService;
     @Autowired
     private AuditLogService auditLogService;
+    @Autowired
+    private EmailService emailService;
+
+    @Value("${app.base-url}")
+    private String baseUrl;
+
 
     @Transactional
     public void revokeCertificate(Long schoolId, Long studentId, String reason) {
@@ -214,6 +221,33 @@ public class CertificateService {
                 // Ghi nhận thành công
 
                 resultDto.addSuccess(item.student.getId(), item.degreeNo, item.ipfsCid, txHash);
+                String verifyLink = baseUrl + "/?certId=" + item.degreeNo;
+
+                if (item.student.getEmail() != null && !item.student.getEmail().isEmpty()) {
+                    // Định dạng ngày sinh thành dd/MM/yyyy để hiển thị trên Email cho đẹp
+                    String formattedDob = "";
+                    if (item.student.getDob() != null) {
+                        try {
+                            // Thử định dạng nếu dob là kiểu LocalDate/LocalDateTime công thức chuẩn
+                            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+                            formattedDob = item.student.getDob().format(formatter);
+                        } catch (Exception e) {
+                            // Nếu dob của bạn đang lưu dạng String sẵn thì gán thẳng luôn
+                            formattedDob = item.student.getDob().toString();
+                        }
+                    }
+
+                    // Gọi EmailService với đầy đủ 2 trường mới bổ sung
+                    emailService.sendCertificateIssuedEmail(
+                            item.student.getEmail(),
+                            item.student.getFullName(),
+                            item.student.getStudentId(), // Truyền Mã sinh viên (Vd: B22DCCN065)
+                            formattedDob,                // Truyền Ngày sinh (Vd: 21/05/2005)
+                            item.degreeNo,
+                            item.student.getMajor(),
+                            verifyLink
+                    );
+                }
             } catch (Exception e) {
                 resultDto.addFailure(item.student.getId(), "Lỗi lưu DB: " + e.getMessage());
             }

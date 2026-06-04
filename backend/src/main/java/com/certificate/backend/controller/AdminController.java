@@ -32,7 +32,6 @@ public class AdminController {
             @PathVariable Long schoolId
     ) {
         adminService.approveSchool(schoolId);
-        auditLogService.logAction(schoolId,"Duyệt tài khoản","Admin đã duyệt tài khoản tổ chức","System Admin");
         return ApiResponse.success("Duyệt thành công!");
     }
 

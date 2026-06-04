@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fe; margin: 0; padding: 40px 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .header { background: #2563eb; padding: 30px; text-align: center; color: white; }
+        .content { padding: 40px; color: #334155; line-height: 1.6; }
+        .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .info-row { margin-bottom: 10px; }
+        .label { font-weight: 600; color: #64748b; display: inline-block; width: 140px; }
+        .btn { display: inline-block; background-color: #16a34a; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 20px; text-align: center; }
+        .footer { background: #0f172a; padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h2 style="margin: 0;">THÔNG BÁO CẤP PHÁT VĂN BẰNG</h2>
+    </div>
+    <div class="content">
+        <p>Xin chào <strong th:text="${studentName}">Sinh viên</strong>,</p>
+        <p>Chúc mừng bạn! Nhà trường đã hoàn tất quá trình lưu trữ và cấp phát văn bằng của bạn lên hệ thống Blockchain.</p>
+
+        <div class="info-box">
+            <div class="info-row"><span class="label">Mã sinh viên:</span> <span th:text="${studentId}">...</span></div>
+            <div class="info-row"><span class="label">Họ và tên:</span> <span th:text="${studentName}">...</span></div>
+            <div class="info-row">
+                <span class="label">Ngày sinh:</span>
+                <span class="value" th:text="${dob}">...</span>
+            </div>
+            <div class="info-row"><span class="label">Chuyên ngành:</span> <span th:text="${major}">...</span></div>
+            <div class="info-row"><span class="label">Mã văn bằng:</span> <strong style="color: #2563eb;" th:text="${degreeNo}">...</strong></div>
+        </div>
+
+        <p>Bạn có thể tra cứu và xác thực văn bằng của mình bất cứ lúc nào thông qua hệ thống CertiChain.</p>
+
+        <div style="text-align: center;">
+            <a th:href="${verifyLink}" class="btn">Tra cứu văn bằng ngay</a>
+        </div>
+    </div>
+    <div class="footer">
+        Hệ thống Quản lý Văn bằng Blockchain minh bạch và an toàn.<br>
+        © 2026 CertiChain System.
+    </div>
+</div>
+</body>
+</html>

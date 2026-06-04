@@ -55,7 +55,9 @@ public class SecurityConfig {
                                 "/api/auth/forgot-password/verify",
                                 "/api/auth/forgot-password/reset",
                                 "/api/auth/verify-otp",
-                                "/api/certificates/scan"
+                                "/api/certificates/scan",
+                                "/api/auth/activate",
+                                "/api/auth/resend-activation"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/admin/*/approve",

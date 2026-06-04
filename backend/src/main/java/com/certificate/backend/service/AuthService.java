@@ -98,7 +98,7 @@ public class AuthService {
         // Kiểm tra OTP bằng Redis (Sai OTP sẽ văng lỗi ngay trong hàm này)
         otpService.verifyOtp(user.getEmail(), otp);
         otpService.deleteOtp(user.getEmail());
-        // BẮT ĐẦU TẠO TOKEN Y HỆT CODE CŨ CỦA BẠN
+
         String accessToken = jwtTokenService.generateAccessToken(user);
         long expirationTime = jwtTokenService.extractExpiration(accessToken).getTime();
 
@@ -109,7 +109,6 @@ public class AuthService {
 
         userRepository.save(user);
 
-        // Trả về DTO của bạn cho Controller
         return new AuthInfoModel(accessToken, refreshToken, user.getUserName(), user.getRole(), expirationTime);
     }
 

@@ -78,7 +78,7 @@ const SchoolManagement = () => {
   const handleAction = async (schoolId, actionName, targetStatus) => {
     if (!window.confirm(`Xác nhận thực hiện hành động này?`)) return;
     try {
-      await axiosClient.put(`/schools/${schoolId}/${actionName}`);
+      await axiosClient.put(`/admin/${schoolId}/${actionName}`);
       
       // Cập nhật nhanh trạng thái bản ghi trên UI hiện tại
       setSchools(schools.map(s => s.id === schoolId ? { ...s, status: targetStatus } : s));
