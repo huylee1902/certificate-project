@@ -4,6 +4,7 @@ import com.certificate.backend.model.enums.SchoolStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -32,6 +33,9 @@ public class SchoolEntity {
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private SchoolStatus status ;
+
+    @Column(name = "approvedAt")
+    private LocalDateTime approvedAt;
 
     private String walletAddress;
 

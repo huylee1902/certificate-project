@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.school.issuse;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,14 +26,7 @@ public class IpfsService {
         this.restTemplate = restTemplate;
     }
 
-    /**
-     * Upload 1 file PDF lên IPFS qua Pinata.
-     *
-     * @param pdfBytes  nội dung file PDF (byte[] từ CertificatePdfGenerator)
-     * @param certId    mã văn bằng — dùng làm tên file trên Pinata (dễ tra cứu)
-     * @return          ipfsHash (CID) — vd: "QmT5NvUtoM5nWFfrDs..."
-     * @throws IpfsUploadException nếu upload thất bại
-     */
+
     public String uploadPdf(byte[] pdfBytes, String certId) {
         log.info("[IPFS] Bắt đầu upload PDF cho văn bằng: {}", certId);
 

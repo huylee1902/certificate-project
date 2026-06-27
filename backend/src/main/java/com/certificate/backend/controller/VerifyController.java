@@ -1,10 +1,9 @@
 package com.certificate.backend.controller;
 
-import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.SearchRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.SearchResponse;
-import com.certificate.backend.service.VerifyService;
+import com.certificate.backend.service.verify.VerifyService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;

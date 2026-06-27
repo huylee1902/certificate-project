@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 
+import java.util.Optional;
 import java.util.Set;
 
 @Repository
@@ -21,7 +22,10 @@ public interface StudentRepository extends JpaRepository<StudentEntity, Long> {
 
     long countBySchool_SchoolIdAndStatus(Long schoolId, Integer status);
 
-    List<StudentEntity> findBySchool_SchoolId(Long schoolId);
+    Optional<StudentEntity> findById(Long id);
+
+    @Query("SELECT c.certId, c.revokedReason FROM CertificateEntity c WHERE c.student.id = :studentId")
+    List<Object[]> findCertByStudentId(@Param("studentId") Long studentId);
 
     @Query("SELECT s FROM StudentEntity s WHERE s.school.schoolId = :schoolId " +
             "AND (:status IS NULL OR s.status = :status) " +

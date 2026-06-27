@@ -17,6 +17,9 @@ public interface CertificateRepository extends JpaRepository<CertificateEntity,L
 
     Optional<CertificateEntity> findByFileHash(String fileHash);
 
+    @Query("SELECT COALESCE(MAX(c.certificateOrder), 0) FROM CertificateEntity c WHERE c.school.schoolId = :schoolId")
+    Long findMaxOrderBySchoolId(@Param("schoolId") Long schoolId);
+
     long countBySchool_SchoolIdAndStatus(Long schoolId, String status);
 
     List<CertificateEntity> findBySchool_SchoolId(Long schoolId);

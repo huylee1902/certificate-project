@@ -9,7 +9,7 @@ import com.certificate.backend.model.dto.Request.LoginRequest;
 import com.certificate.backend.model.dto.Request.RegisterRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.enums.ErrorCode;
-import com.certificate.backend.service.AuthService;
+import com.certificate.backend.service.auth.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;

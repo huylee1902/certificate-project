@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.auth;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.ForgotPasswordRequest;
@@ -82,7 +82,8 @@ public class AuthService {
                 throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVATED);
             }
 
-            otpService.sendOtp(user.getEmail());
+            otpService.sendOtp(user.getEmail(),"Mã xác nhận Đăng nhập - CertiChain",
+                    "Đăng nhập hệ thống (Xác thực 2 bước)");
         }
         else{
             throw new AppException(ErrorCode.INVALID_USERNAME);
@@ -220,7 +221,7 @@ public class AuthService {
     public void forgotPassword(String email) {
         UserEntity user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        otpService.sendOtp(user.getEmail());
+        otpService.sendOtp(user.getEmail(),"Mã xác thực quên mật khẩu","Quên mật khẩu");
     }
 
     public void verifyResetOtp(String email, String otp) {

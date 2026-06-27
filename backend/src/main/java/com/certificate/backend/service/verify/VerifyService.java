@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.verify;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.SearchRequest;
@@ -7,6 +7,7 @@ import com.certificate.backend.model.entity.CertificateEntity;
 import com.certificate.backend.model.entity.StudentEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.CertificateRepository;
+import com.certificate.backend.service.blockchain.BlockchainService;
 import com.certificate.backend.utils.HashUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -5,10 +5,10 @@ import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.PageAdminDto;
 import com.certificate.backend.model.dto.Response.SchoolAnalyticsDto;
 import com.certificate.backend.model.dto.Response.SchoolDto;
-import com.certificate.backend.service.AccountService;
-import com.certificate.backend.service.AdminService;
-import com.certificate.backend.service.AuditLogService;
-import com.certificate.backend.service.SchoolService;
+import com.certificate.backend.service.auth.AccountService;
+import com.certificate.backend.service.admin.AdminService;
+import com.certificate.backend.service.admin.AuditLogService;
+import com.certificate.backend.service.admin.SchoolService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 

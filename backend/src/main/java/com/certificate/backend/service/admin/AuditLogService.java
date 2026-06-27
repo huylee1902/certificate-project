@@ -1,7 +1,6 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.admin;
 
 import com.certificate.backend.model.entity.AuditLogEntity;
-import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.repository.AuditLogRepository;
 import com.certificate.backend.repository.SchoolRepository;
 import org.springframework.beans.factory.annotation.Autowired;

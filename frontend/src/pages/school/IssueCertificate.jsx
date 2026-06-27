@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileSpreadsheet, Send, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, FileSpreadsheet, Send, ChevronLeft, ChevronRight,CheckCircle2,X,AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import axiosClient from '../../api/axiosClient';
@@ -7,11 +7,12 @@ import axiosClient from '../../api/axiosClient';
 import StudentTable from '../../components/school/StudentTable';
 import RevokeModal from '../../components/school/RevokeModal';
 import ActionProgressModal from '../../components/school/ActionProgressModal';
+// 1. IMPORT COMPONENT MỚI VÀO ĐÂY
+import StudentDetailModal from '../../components/school/StudentDetailModal'; 
 
 export default function IssueCertificate() {
   const fileInputRef = useRef(null);
 
-  // --- STATES QUẢN LÝ DỮ LIỆU VÀ PHÂN TRANG ---
   const [students, setStudents] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,17 +23,20 @@ export default function IssueCertificate() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   
-  // ĐÃ SỬA: State cho số dòng hiển thị và Ngành học
   const [pageSize, setPageSize] = useState(50); 
-  const [majorFilter, setMajorFilter] = useState(''); 
+  const [majorFilter, setMajorFilter] = useState('');
 
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [openRevokeModal, setOpenRevokeModal] = useState(false);
   const [studentToRevoke, setStudentToRevoke] = useState(null);
   const [revokeReason, setRevokeReason] = useState('');
   const [isSubmittingRevoke, setIsSubmittingRevoke] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState(true);
 
-  // --- STATE QUẢN LÝ THANH TIẾN TRÌNH % ---
+  // 2. KHAI BÁO STATE QUẢN LÝ MODAL CHI TIẾT
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [studentForDetail, setStudentForDetail] = useState(null);
+
   const [actionState, setActionState] = useState({
     isOpen: false,
     title: '',
@@ -43,7 +47,7 @@ export default function IssueCertificate() {
   });
   const intervalRef = useRef(null);
 
-  // --- ENGINE MÔ PHỎNG % CHO MODAL ---
+  // ... (Giữ nguyên các hàm Fake Progress và Gọi API của bạn) ...
   const startFakeProgress = (title, description) => {
     setActionState({ isOpen: true, title, description, progress: 0, status: 'loading' });
     intervalRef.current = setInterval(() => {
@@ -73,8 +77,6 @@ export default function IssueCertificate() {
     }
   };
 
-  // --- ACTIONS GỌI API ---
-  // ĐÃ SỬA: Thêm majorFilter và pageSize vào dependency
   useEffect(() => { fetchStudents(); }, [currentPage, filter, majorFilter, pageSize]);
   
   useEffect(() => {
@@ -105,7 +107,6 @@ export default function IssueCertificate() {
     try {
       setLoading(true);
       const response = await axiosClient.get('/students', {
-        // ĐÃ SỬA: Truyền major xuống API
         params: { page: currentPage, size: pageSize, search: searchTerm, status: filter, major: majorFilter }
       });
       if (response.data?.code === 200) {
@@ -183,22 +184,54 @@ export default function IssueCertificate() {
     }
   };
 
+  useEffect(() => {
+      if (toast.show) {
+        const timer = setTimeout(() => setToast({ ...toast, show: false }), 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [toast.show]);
   const handleConfirmRevoke = async () => {
     if (!revokeReason.trim() || !studentToRevoke) return;
     try {
       setIsSubmittingRevoke(true);
       const res = await axiosClient.post(`/certificates/revoke/${studentToRevoke.id}`, { reason: revokeReason });
+      
       if (res.data?.code === 200) { 
         setOpenRevokeModal(false); 
+        
+        // 1. Hiển thị thông báo thành công ngọt ngào
+        setToast({
+          show: true,
+          message: `Đã thu hồi văn bằng của sinh viên ${studentToRevoke.fullName || studentToRevoke.name} thành công!`,
+          type: 'success'
+        });
+
         setStudentToRevoke(null); 
+        setRevokeReason(''); // Làm sạch ô nhập lý do để lần sau không bị dính chữ cũ
         fetchStudents(); 
+      } else {
+        // 2. Hiển thị lỗi từ phía Backend trả về dạng nghiệp vụ công việc
+        setToast({
+          show: true,
+          message: res.data?.message || "Thu hồi văn bằng thất bại!",
+          type: 'error'
+        });
       }
-    } catch (e) { console.error(e); } finally { setIsSubmittingRevoke(false); }
+    } catch (e) { 
+      console.error(e); 
+      // 3. Hiển thị lỗi hệ thống, kết nối mạng
+      setToast({
+        show: true,
+        message: e.response?.data?.message || "Có lỗi xảy ra khi kết nối tới máy chủ!",
+        type: 'error'
+      });
+    } finally { 
+      setIsSubmittingRevoke(false); 
+    }
   };
 
   const toggleSelect = (id) => setSelectedIds(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]);
   
-  // ĐÃ SỬA: Hàm chọn tất cả thông minh (Chỉ áp dụng cho trang hiện tại)
   const toggleSelectAll = () => {
     const currentPendingIds = (students || [])
       .filter(s => s.status === 'pending' || s.status === 0)
@@ -222,7 +255,6 @@ export default function IssueCertificate() {
     <div className="space-y-6">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".xlsx, .xls" className="hidden" />
 
-        {/* HÀNG RÀO CẢNH BÁO: CHƯA HOÀN THIỆN HỒ SƠ */}
         {!isProfileComplete && (
         <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-xl shadow-sm flex items-start gap-3 animate-pulse">
             <span className="text-orange-500 mt-0.5">⚠️</span>
@@ -235,7 +267,6 @@ export default function IssueCertificate() {
         </div>
         )}
 
-      {/* SEARCH VÀ TABS */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4 flex-1">
           <div className="relative flex-1 max-w-xs">
@@ -247,7 +278,6 @@ export default function IssueCertificate() {
             />
           </div>
 
-          {/* ĐÃ SỬA: DROPDOWN CHỌN NGÀNH HỌC */}
           <select
             value={majorFilter}
             onChange={(e) => {
@@ -297,15 +327,15 @@ export default function IssueCertificate() {
         </div>
       </div>
 
-      {/* KHU VỰC BẢNG & PHÂN TRANG */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden min-h-[350px]">
         <StudentTable 
           students={students} loading={loading} filter={filter} selectedIds={selectedIds}
           toggleSelect={toggleSelect} toggleSelectAll={toggleSelectAll}
           onOpenRevoke={(s) => { setStudentToRevoke(s); setRevokeReason(''); setOpenRevokeModal(true); }}
+          // 3. TRUYỀN HÀM MỞ MODAL XUỐNG BẢNG
+          onOpenDetail={(s) => { setStudentForDetail(s); setDetailModalOpen(true); }}
         />
         
-        {/* THANH ĐIỀU HƯỚNG PHÂN TRANG */}
         {!loading && totalPages > 0 && (
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-600 font-medium">
             <div>
@@ -315,7 +345,6 @@ export default function IssueCertificate() {
             </div>
             
             <div className="flex items-center gap-6">
-              {/* ĐÃ SỬA: DROPDOWN CHỌN SỐ DÒNG HIỂN THỊ */}
               <div className="flex items-center gap-2">
                 <span className="text-slate-500">Hiển thị:</span>
                 <select 
@@ -370,6 +399,48 @@ export default function IssueCertificate() {
         )}
       </div>
 
+      {toast.show && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-slate-900/30 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={`flex items-start gap-5 px-8 py-6 rounded-2xl shadow-2xl border bg-white max-w-lg w-full mx-4 transform animate-in zoom-in-95 duration-300 ${
+            toast.type === 'success' 
+              ? 'border-emerald-200 shadow-emerald-500/10' 
+              : 'border-rose-200 shadow-rose-500/10'
+          }`}>
+            {/* Icon được phóng to lên size 24 và bọc trong khung đổ bóng đổ góc tròn */}
+            {toast.type === 'success' ? (
+              <div className="p-3 bg-emerald-500 text-white rounded-xl shrink-0 shadow-lg shadow-emerald-500/30">
+                <CheckCircle2 size={24} />
+              </div>
+            ) : (
+              <div className="p-3 bg-rose-500 text-white rounded-xl shrink-0 shadow-lg shadow-rose-500/30">
+                <AlertCircle size={24} />
+              </div>
+            )}
+            
+            {/* Nội dung thông báo được tăng kích thước chữ */}
+            <div className="flex-1 pt-0.5">
+              <p className={`text-xs font-bold uppercase tracking-widest ${
+                toast.type === 'success' ? 'text-emerald-600' : 'text-rose-600'
+              }`}>
+                {toast.type === 'success' ? 'Hệ thống thông báo' : 'Hệ thống cảnh báo'}
+              </p>
+              <p className="text-base font-extrabold text-slate-800 mt-1.5 leading-relaxed">
+                {toast.message}
+              </p>
+            </div>
+
+            {/* Nút đóng thông báo được tăng khoảng cách click */}
+            <button 
+              type="button"
+              onClick={() => setToast({ ...toast, show: false })}
+              className="text-slate-400 hover:text-slate-600 p-1.5 transition rounded-xl hover:bg-slate-100 shrink-0 -mt-1"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODALS */}
       <AnimatePresence>
         <RevokeModal 
@@ -385,6 +456,13 @@ export default function IssueCertificate() {
           status={actionState.status} 
           errorDetails={actionState.errorDetails} 
           onClose={() => setActionState(p => ({ ...p, isOpen: false }))} 
+        />
+
+        {/* 4. NHÚNG MODAL CHI TIẾT VÀO ĐÂY */}
+        <StudentDetailModal 
+          isOpen={detailModalOpen}
+          student={studentForDetail}
+          onClose={() => { setDetailModalOpen(false); setTimeout(() => setStudentForDetail(null), 200); }} 
         />
       </AnimatePresence>
     </div>

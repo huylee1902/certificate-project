@@ -6,10 +6,8 @@ import com.certificate.backend.model.dto.Response.ImportResultDto;
 import com.certificate.backend.model.dto.Response.PageResponseDto;
 import com.certificate.backend.model.dto.Response.StudentResponseDto;
 import com.certificate.backend.model.enums.ErrorCode;
-import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.security.SecurityUserDetail;
-import com.certificate.backend.service.AuditLogService;
-import com.certificate.backend.service.ImportStudentService;
+import com.certificate.backend.service.school.ImportStudentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -17,7 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 import com.certificate.backend.service.StudentService;
 
 import java.security.Principal;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/students")
@@ -69,5 +66,12 @@ public class StudentController {
         String username = principal.getName();
         PageResponseDto<StudentResponseDto> data = studentService.getStudents(username,page, size, search,major, status);
         return ApiResponse.success(data);
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<?> getStudentDetail(
+            @PathVariable Long id,
+            @AuthenticationPrincipal SecurityUserDetail currentUser) {
+        return ApiResponse.success(studentService.getStudentDetail(id, currentUser.schoolId()));
     }
 }

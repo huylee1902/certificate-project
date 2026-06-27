@@ -34,6 +34,6 @@ public interface SchoolRepository extends JpaRepository<SchoolEntity, Long> {
             "AND (:status IS NULL OR s.status = :status)")
     Page<SchoolEntity> searchAndFilterSchools(
             @Param("keyword") String keyword,
-            @Param("status") String status,
+            @Param("status") SchoolStatus status,
             Pageable pageable);
 }

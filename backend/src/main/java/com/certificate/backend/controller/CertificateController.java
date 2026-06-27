@@ -4,11 +4,8 @@ import com.certificate.backend.model.dto.Request.IssueRequest;
 import com.certificate.backend.model.dto.Request.RevokeRequest;
 import com.certificate.backend.model.dto.Response.ApiResponse;
 import com.certificate.backend.model.dto.Response.IssueResponse;
-import com.certificate.backend.model.entity.SchoolEntity;
-import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.security.SecurityUserDetail;
-import com.certificate.backend.service.AuditLogService;
-import com.certificate.backend.service.CertificateService;
+import com.certificate.backend.service.school.issuse.CertificateService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 

@@ -83,6 +83,7 @@ const SchoolManagement = () => {
       // Cập nhật nhanh trạng thái bản ghi trên UI hiện tại
       setSchools(schools.map(s => s.id === schoolId ? { ...s, status: targetStatus } : s));
       setShowSchoolModal(false); 
+      fetchSchoolsFromBackend();
       alert("Cập nhật thành công!");
 
       if (targetStatus === 'APPROVED') {

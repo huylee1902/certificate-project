@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fe; margin: 0; padding: 40px 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .header { padding: 30px; text-align: center; color: white; }
+        /* Các màu theme động */
+        .bg-danger { background-color: #dc2626; }
+        .bg-success { background-color: #16a34a; }
+        .content { padding: 40px; color: #334155; line-height: 1.6; }
+        .status-badge { display: inline-block; padding: 6px 14px; font-weight: bold; border-radius: 20px; font-size: 14px; margin-top: 10px; }
+        .badge-danger { bg-color: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .badge-success { bg-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .footer { background: #0f172a; padding: 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header" th:classappend="${isSuccess} ? 'bg-success' : 'bg-danger'">
+        <h2 style="margin: 0; letter-spacing: 0.5px;" th:text="${title}">THÔNG BÁO TỪ HỆ THỐNG</h2>
+    </div>
+    <div class="content">
+        <p>Kính gửi ban quản trị <strong th:text="${schoolName}">Tên trường</strong>,</p>
+        <p>Hệ thống quản lý văn bằng CertiChain thông báo về việc thay đổi trạng thái vận hành tài khoản của tổ chức quý khách như sau:</p>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 25px 0;">
+            <div style="margin-bottom: 10px;">
+                <span style="font-weight: 600; color: #64748b;">Tổ chức:</span>
+                <span style="color: #0f172a; font-weight: 500;" th:text="${schoolName}">...</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <span style="font-weight: 600; color: #64748b;">Trạng thái mới:</span> <br>
+                <span class="status-badge"
+                      th:classappend="${isSuccess} ? 'badge-success' : 'badge-danger'"
+                      th:text="${statusText}">Trạng thái</span>
+            </div>
+            <div style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 15px;">
+                <span style="font-weight: 600; color: #64748b;">Nội dung chi tiết từ Admin:</span>
+                <p style="color: #0f172a; font-weight: 500; margin: 5px 0 0 0; white-space: pre-line;" th:text="${message}">Nội dung lý do...</p>
+            </div>
+        </div>
+
+        <p>Nếu có bất kỳ thắc mắc hoặc khiếu nại nào về quyết định này, quý khách vui lòng phản hồi trực tiếp qua email này để hệ thống kỹ thuật và Hội đồng quản trị CertiChain hỗ trợ giải quyết.</p>
+        <p>Trân trọng,<br><strong>Ban quản trị tối cao CertiChain</strong></p>
+    </div>
+    <div class="footer">
+        Hệ thống Quản lý và Xác thực Văn bằng Blockchain toàn diện.<br>
+        © 2026 CertiChain System.
+    </div>
+</div>
+</body>
+</html>

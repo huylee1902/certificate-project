@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.school.issuse;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.IssueRequest;
@@ -10,6 +10,10 @@ import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.CertificateRepository;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.StudentRepository;
+import com.certificate.backend.service.admin.AuditLogService;
+import com.certificate.backend.service.auth.EmailService;
+import com.certificate.backend.service.blockchain.BlockchainService;
+import com.certificate.backend.service.blockchain.WalletService;
 import com.certificate.backend.utils.HashUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,7 +26,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -111,7 +114,6 @@ public class CertificateService {
         SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
                 .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
 
-        // Lưu ý: Đổi getPrincipalName() thành getter tương ứng trong SchoolEntity của bạn (VD: getRectorName())
         if (school.getRectorName() == null || school.getRectorName().trim().isEmpty()) {
             throw new AppException(ErrorCode.PROFILE_INCOMPLETE);
         }
@@ -132,25 +134,30 @@ public class CertificateService {
             return resultDto;
         }
 
+        Long currentMaxOrder = certificateRepository.findMaxOrderBySchoolId(schoolId);
+
         // Mỗi Chunk <= 50
         List<List<StudentEntity>> chunks = partitionIntoChunks(validStudents, BLOCKCHAIN_BATCH_LIMIT);
 
         // 3. Xử lý từng Chunk
         for (int i = 0; i < chunks.size(); i++) {
-            processChunk(schoolId, chunks.get(i), resultDto);
+            currentMaxOrder = processChunk(schoolId, chunks.get(i),currentMaxOrder,resultDto);
         }
 
         return resultDto;
     }
 
-    private void processChunk(Long schoolId, List<StudentEntity> chunkStudents, IssueResponse resultDto) {
+    private Long processChunk(Long schoolId, List<StudentEntity> chunkStudents,Long currentMaxOrder, IssueResponse resultDto) {
         List<ChunkItem> items = new ArrayList<>();
         int currentYear = LocalDate.now().getYear();
+        Long runningOrder = currentMaxOrder;
 
         for (StudentEntity student : chunkStudents) {
+            runningOrder++;
             ChunkItem item = new ChunkItem(student);
-            item.degreeNo = student.getSchool().getSchoolCode()+ "-" + currentYear + "-" + String.format("%04d", student.getId());
-            item.regNo = currentYear + "/" + String.format("%04d", student.getId());
+            item.degreeNo = student.getSchool().getSchoolCode()+ "-" + currentYear + "-" + String.format("%04d", runningOrder);
+            item.regNo = currentYear + "/" + String.format("%04d", runningOrder);
+            item.certificateOrder = runningOrder;
             items.add(item);
         }
         // PDF và IPFS
@@ -168,7 +175,7 @@ public class CertificateService {
         }
 
         List<ChunkItem> readyItems = items.stream().filter(item -> item.isReadyForBlockchain).toList();
-        if (readyItems.isEmpty()) return;
+        if (readyItems.isEmpty()) return runningOrder;
 
         // BƯỚC 3: Đẩy lên Blockchain (Gom thành 1 Batch)
         String txHash;
@@ -191,10 +198,11 @@ public class CertificateService {
 
             log.error("[Blockchain] Lỗi ghi chunk: {}", e.getMessage());
             readyItems.forEach(i -> resultDto.addFailure(i.student.getId(), "Lỗi Blockchain: " + e.getMessage()));
-            return;
+            return runningOrder;
         }
 
         saveChunkToDatabase(schoolId,readyItems, txHash, resultDto);
+        return runningOrder;
     }
 
     @Transactional
@@ -206,6 +214,7 @@ public class CertificateService {
                 CertificateEntity cert = CertificateEntity.builder()
                         .certId(item.degreeNo)
                         .regNo(item.regNo)
+                        .certificateOrder(item.certificateOrder)
                         .ipfsHash(item.ipfsCid)
                         .fileHash(item.fileHash)
                         .txHash(txHash)
@@ -276,6 +285,7 @@ public class CertificateService {
         String regNo;
         String ipfsCid;
         String fileHash;
+        Long certificateOrder;
         boolean isReadyForBlockchain = false;
 
         ChunkItem(StudentEntity student) {

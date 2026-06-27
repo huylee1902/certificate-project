@@ -9,7 +9,8 @@ export default function StudentTable({
   selectedIds, 
   toggleSelect, 
   toggleSelectAll, 
-  onOpenRevoke 
+  onOpenRevoke,
+  onOpenDetail // ĐÃ THÊM: Prop để mở Modal chi tiết
 }) {
   if (loading) {
     return (
@@ -20,11 +21,8 @@ export default function StudentTable({
     );
   }
 
-  // 1. TÍNH TOÁN SINH VIÊN HỢP LỆ CỦA TRANG HIỆN TẠI
-  // Hỗ trợ cả 'pending' (chuỗi) và 0 (số) đề phòng backend trả về số
   const currentPendingStudents = (students || []).filter(s => s.status === 'pending' || s.status === 0);
   
-  // 2. TÍNH TOÁN XEM TOÀN BỘ TRANG NÀY ĐÃ ĐƯỢC CHỌN CHƯA
   const isAllCurrentPageSelected = 
       currentPendingStudents.length > 0 && 
       currentPendingStudents.every(s => selectedIds.includes(s.id));
@@ -38,9 +36,7 @@ export default function StudentTable({
               <input 
                 type="checkbox" 
                 onChange={toggleSelectAll}
-                // ĐÃ SỬA: Sử dụng biến vừa tính toán ở trên
                 checked={isAllCurrentPageSelected}
-                // ĐÃ SỬA: Làm mờ đi nếu trang này không có sinh viên nào chờ cấp
                 disabled={currentPendingStudents.length === 0}
                 className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
               />
@@ -56,15 +52,16 @@ export default function StudentTable({
           {(students || []).map((s) => (
             <tr 
               key={`student-${s.id}-${s.studentId}`} 
+              onClick={() => onOpenDetail && onOpenDetail(s)} // ĐÃ THÊM: Click mở modal
               className={cn(
-                "hover:bg-slate-50 transition-colors group",
+                "hover:bg-slate-50 transition-colors group cursor-pointer", // ĐÃ THÊM: Con trỏ chuột dạng pointer
                 selectedIds.includes(s.id) && "bg-blue-50/50"
               )}
             >
-              <td className="px-6 py-4">
+              {/* ĐÃ THÊM: Chặn click lan truyền ở ô checkbox */}
+              <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                 <input 
                   type="checkbox" 
-                  // Hỗ trợ cả string và số
                   disabled={s.status !== 'pending' && s.status !== 0}
                   checked={selectedIds.includes(s.id)}
                   onChange={() => toggleSelect(s.id)}
@@ -106,7 +103,9 @@ export default function StudentTable({
                   </span>
                 )}
               </td>
-              <td className="px-6 py-4 text-right">
+              
+              {/* ĐÃ THÊM: Chặn click lan truyền ở nút Thu hồi */}
+              <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                 {s.status === 'issued' || s.status === 1 ? (
                   <button 
                     onClick={() => onOpenRevoke(s)}
@@ -115,8 +114,11 @@ export default function StudentTable({
                     <FileX className="w-3.5 h-3.5" /> Thu hồi bằng
                   </button>
                 ) : (
-                  <span className="text-xs text-slate-400 italic font-medium pr-2">
-                    {s.status === 'pending' || s.status === 0 ? 'Chờ cấp' : 'Bị tước quyền'}
+                  <span 
+                    className="text-xs text-slate-400 italic font-medium pr-2 hover:text-blue-600 transition-colors"
+                    onClick={() => onOpenDetail && onOpenDetail(s)}
+                  >
+                    Nhấp xem chi tiết
                   </span>
                 )}
               </td>

@@ -57,7 +57,8 @@ public class SecurityConfig {
                                 "/api/auth/verify-otp",
                                 "/api/certificates/scan",
                                 "/api/auth/activate",
-                                "/api/auth/resend-activation"
+                                "/api/auth/resend-activation",
+                                "/api/chat/**"
                         ).permitAll()
                         .requestMatchers(
                                 "/api/admin/*/approve",
@@ -73,6 +74,8 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 "/api/students/import",
+                                "/api/students",
+                                "/api/students/*",
                                 "/api/certificates/issue",
                                 "/api/certificates/revoke/*",
                                 "/api/school/dashboard"
@@ -94,7 +97,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173")); // Port của React
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173",
+                "http://192.168.1.8:5173",                           // ← Thêm IP LAN
+                "https://ladder-sharpie-drab.ngrok-free.dev"         // ← Thêm ngrok frontend
+                 ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

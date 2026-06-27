@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.school;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.CertificateEntity;

@@ -2,19 +2,16 @@ package com.certificate.backend.service.impl;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.IssueRequest;
-import com.certificate.backend.model.dto.Response.ImportResultDto;
-import com.certificate.backend.model.dto.Response.IssueResponse;
-import com.certificate.backend.model.dto.Response.PageResponseDto;
+import com.certificate.backend.model.dto.Response.*;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.StudentEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.CertificateRepository;
 import com.certificate.backend.repository.SchoolRepository;
 import com.certificate.backend.repository.StudentRepository;
-import com.certificate.backend.service.CertificateService;
-import com.certificate.backend.service.ImportStudentService;
+import com.certificate.backend.service.school.issuse.CertificateService;
+import com.certificate.backend.service.school.ImportStudentService;
 import com.certificate.backend.service.StudentService;
-import com.certificate.backend.model.dto.Response.StudentResponseDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -24,6 +21,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -88,6 +86,45 @@ public class StudentServiceImpl implements StudentService {
                 .last(studentPage.isLast())
                 .build();
     }
+
+    @Override
+    public StudentDetail getStudentDetail (Long id, Long schoolId){
+        SchoolEntity school = schoolRepository.findBySchoolId(schoolId)
+                .orElseThrow(() -> new AppException(ErrorCode.SCHOOL_NOT_FOUND));
+
+        StudentEntity s = studentRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        String reactStatus = "pending";
+        if (s.getStatus() == 1) reactStatus = "issued";
+        else if (s.getStatus() == 2) reactStatus = "revoked";
+
+        String certId = null;
+        String revokeReason = null;
+
+        if (s.getStatus() == 1 || s.getStatus() == 2) {
+            List<Object[]> certRows = studentRepository.findCertByStudentId(id);
+            if (!certRows.isEmpty()) {
+                Object[] row = certRows.get(0); // lấy cert mới nhất (ORDER BY id DESC)
+                certId = row[0] != null ? row[0].toString() : null;
+                revokeReason = row[1] != null ? row[1].toString() : null;
+            }
+        }
+
+        return StudentDetail.builder()
+                .studentId(s.getStudentId())
+                .name(s.getFullName())
+                .email(s.getEmail())
+                .major(s.getMajor())
+                .batch(s.getTrainingType() != null ? s.getTrainingType() : "Chính quy")
+                .status(reactStatus)
+                .dob(dateFormatter.format(s.getDob()))
+                .certId(certId)
+                .revokeReason(revokeReason)
+                .build();
+    }
+
 
     @Override
     public ImportResultDto importStudentsFromExcel(MultipartFile file, Long schoolId) throws Exception{

@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.auth;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.enums.ErrorCode;
@@ -23,7 +23,7 @@ public class OtpService {
     private static final int OTP_EXPIRY_MINUTES= 3;
     private static final int COOLDOWN_SECONDS = 60;
 
-    public void sendOtp(String currentEmail) {
+    public void sendOtp(String currentEmail,String subject, String actionName) {
 
         // 1. KIỂM TRA SPAM (COOLDOWN LOCK) TRƯỚC TIÊN
         String cooldownKey = REDIS_COOLDOWN_PREFIX + currentEmail;
@@ -42,7 +42,7 @@ public class OtpService {
         // 4. LƯU KHÓA CHỐNG SPAM (Khóa 60 giây)
         redisTemplate.opsForValue().set(cooldownKey, "LOCKED", COOLDOWN_SECONDS, TimeUnit.SECONDS);
         // Gọi EmailService gửi HTML xịn xò
-        emailService.sendOtpEmail(currentEmail, otp);
+        emailService.sendOtpEmail(currentEmail, otp,subject, actionName);
     }
 
     public void verifyOtp(String currentEmail, String inputOtp) {

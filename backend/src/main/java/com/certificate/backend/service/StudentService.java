@@ -1,10 +1,7 @@
 package com.certificate.backend.service;
 
 import com.certificate.backend.model.dto.Request.IssueRequest;
-import com.certificate.backend.model.dto.Response.ImportResultDto;
-import com.certificate.backend.model.dto.Response.IssueResponse;
-import com.certificate.backend.model.dto.Response.PageResponseDto;
-import com.certificate.backend.model.dto.Response.StudentResponseDto;
+import com.certificate.backend.model.dto.Response.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -21,4 +18,6 @@ public interface StudentService {
 
     // 4. Thu hồi văn bằng
     void revokeCertificate(Long schoolId, Long studentId, String reason);
+
+    StudentDetail getStudentDetail(Long studentId, Long schoolId);
 }

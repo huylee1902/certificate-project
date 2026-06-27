@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.admin;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.dto.Request.UpdateProfileRequest;
@@ -21,10 +21,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.text.DecimalFormat;
-import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +48,16 @@ public class SchoolService {
        Pageable pageable = PageRequest.of(page - 1, size);
 
        // Xử lý logic lọc
-       String actualStatus = "ALL".equalsIgnoreCase(status) ? null : status;
+       SchoolStatus actualStatus = null;
+       if (status != null && !"ALL".equalsIgnoreCase(status)) {
+           try {
+               // Chuyển chuỗi (VD: "PENDING") thành Enum tương ứng
+               actualStatus = SchoolStatus.valueOf(status.toUpperCase());
+           } catch (IllegalArgumentException e) {
+               // Nếu Frontend vô tình gửi một status không tồn tại, tự động lấy tất cả
+               actualStatus = null;
+           }
+       }
        String actualKeyword = (keyword == null || keyword.trim().isEmpty()) ? null : keyword.trim();
 
        // Gọi DB
@@ -132,8 +139,8 @@ public class SchoolService {
                 .walletAddress(school.getWalletAddress() != null ? school.getWalletAddress() : "0xChuaCapNhatViBlockchain")
                 .blockchainStatus("Đang hoạt động (Đã kết nối Node)")
                 .createdAt(user.getCreatedAt() != null ? user.getCreatedAt().format(dateFormatter) : "Chưa rõ")
-                .approvedBy("admin@system.vn")
-                .approvedAt("Chưa rõ")
+                .approvedBy("Admin hệ thống")
+                .approvedAt(dateFormatter.format(school.getApprovedAt()))
                 .lastLogin(user.getLastLogin() != null ? user.getLastLogin().format(dateFormatter) : "Chưa rõ")
                 .build();
 

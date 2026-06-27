@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.blockchain;
 
 import com.certificate.backend.contract.CertificateRegistry;
 import com.certificate.backend.exception.AppException;
@@ -32,7 +32,7 @@ public class BlockchainService {
     private final String contractAddress;
 
     public BlockchainService(
-            @Value("${blockchain.node.url}")         String nodeUrl,
+            @Value("${blockchain.node.url}")         String nodeUrl,// node cấu hình khi thực hiện giao dịch
             @Value("${blockchain.admin.key}")  String adminKey,
             @Value("${blockchain.contract.address}") String contractAddress
     ) {
@@ -55,6 +55,7 @@ public class BlockchainService {
     ) {
         try {
             // Load contract với credentials của superAdmin
+            // tạo ra 1 đối tượng "contract" trong RAM với các thông tin ban đầu
             CertificateRegistry registry = CertificateRegistry.load(
                     contractAddress,
                     web3j,

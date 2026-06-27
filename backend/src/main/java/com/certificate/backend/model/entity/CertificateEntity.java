@@ -48,6 +48,9 @@ public class CertificateEntity {
     @Column(length = 500)
     private String revokedReason;
 
+    @Column(name = "certificate_order")
+    private Long certificateOrder;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "schoolId",nullable = false)
     private SchoolEntity school;

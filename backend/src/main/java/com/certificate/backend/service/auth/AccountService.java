@@ -1,7 +1,6 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.auth;
 
 import com.certificate.backend.exception.AppException;
-import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.entity.UserEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.repository.SchoolRepository;
@@ -43,7 +42,8 @@ public class AccountService {
         return data;
     }
     public void sendOtp() {
-        otpService.sendOtp(getCurrentEmail());
+        otpService.sendOtp(getCurrentEmail(),"Mã xác nhận Thay đổi Email - CertiChain",
+                "Thay đổi địa chỉ Email");
     }
 
     @Transactional

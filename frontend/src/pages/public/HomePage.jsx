@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, ShieldCheck, FileText, Award, Menu, X, 
   Building, CheckCircle, UploadCloud, ArrowRight, Lock, 
-  Link as LinkIcon, ChevronDown, ArrowLeft, AlertTriangle, ExternalLink, FileX
+  Link as LinkIcon, ChevronDown, ArrowLeft, AlertTriangle, ExternalLink, FileX, MessageSquare, Send 
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 
 const HomePage = () => {
@@ -16,6 +15,14 @@ const HomePage = () => {
   
   const [verifyStatus, setVerifyStatus] = useState('idle'); // idle, loading, success, error
   const [certData, setCertData] = useState(null);
+
+  // Các State quản lý trạng thái Chatbox
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const [messages, setMessages] = useState([
+    { id: 1, text: "Xin chào! Tôi là AI Hỗ trợ của CertiChain. Tôi có thể giúp gì cho bạn?", isBot: true }
+  ]);
+  const [isBotTyping, setIsBotTyping] = useState(false);
 
   const [searchParams] = useSearchParams();
   useEffect(() => {
@@ -118,6 +125,55 @@ const HomePage = () => {
 
   // Logic kiểm tra trạng thái bằng (Revoked / Valid)
   const isRevoked = certData?.status?.toUpperCase() === 'REVOKED';
+
+   // Hàm xử lý gửi tin nhắn Chatbox (Có hiệu ứng phản hồi tự động)
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isBotTyping) return;
+
+    const userText = chatInput;
+    setChatInput('');
+
+    // 1. Hiển thị tin nhắn của Người dùng lên màn hình ngay lập tức
+    const userMessage = { id: Date.now(), text: userText, isBot: false };
+    setMessages(prev => [...prev, userMessage]);
+    
+    // 2. Bật trạng thái "Bot đang gõ..."
+    setIsBotTyping(true);
+
+    try {
+      // 3. Gọi API sang Back-end Spring Boot
+      const response = await axiosClient.post('/chat', { message: userText });
+      
+      console.log("Dữ liệu thực tế BE trả về:", response.data); // Dòng này để bạn F12 check log cho chuẩn
+
+      // Kiểm tra cấu trúc trả về (Hỗ trợ cả trường hợp bọc qua response.data hoặc response.data.message)
+      const aiResponseText = response.data?.message || response.data?.reply || response.data;
+
+      if (aiResponseText) {
+        const botMessage = { id: Date.now() + 1, text: aiResponseText, isBot: true };
+        setMessages(prev => [...prev, botMessage]);
+      } else {
+        const errorMessage = { id: Date.now() + 1, text: "Hệ thống không trả về nội dung, bạn thử lại sau nhé!", isBot: true };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error("Lỗi gọi API Chatbot:", error);
+      
+      // Đọc chi tiết lỗi từ Server trả về nếu có
+      const serverErrorLog = error.response?.data?.message || "Không thể kết nối đến máy chủ AI.";
+      
+      const errorMessage = { 
+        id: Date.now() + 1, 
+        text: `Lỗi kết nối: ${serverErrorLog}`, 
+        isBot: true 
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      // 4. Tắt trạng thái "Bot đang gõ..."
+      setIsBotTyping(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-200">
@@ -293,7 +349,7 @@ const HomePage = () => {
                 
                 {/* Nút bấm xem file PDF Gốc - Động theo IPFS Url */}
                 <div className={`md:col-span-2 pt-4 border-t ${isRevoked ? 'border-rose-200/50' : 'border-slate-200'}`}>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Đường dẫn tệp gốc (IPFS)</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Đường dẫn tệp gốc </span>
                   
                   {certData.ipfsUrl && !isRevoked ? (
                     <a 
@@ -302,7 +358,7 @@ const HomePage = () => {
                       rel="noopener noreferrer" 
                       className="flex items-center justify-center gap-2 w-full py-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 font-bold hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm"
                     >
-                      <ExternalLink className="w-5 h-5"/> Nhấn để xem bản gốc trên mạng IPFS
+                      <ExternalLink className="w-5 h-5"/> Nhấn để xem bản gốc 
                     </a>
                   ) : (
                     <div className="flex flex-col items-center justify-center w-full py-4 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 font-bold shadow-sm cursor-not-allowed">
@@ -409,6 +465,94 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+
+      {/* ================= BONG BÓNG CHAT VÀ DIỆN CỬA SỔ CHATBOX ================= */}
+        <div className="fixed bottom-6 right-6 z-50 font-sans">
+          {/* 1. Nút bong bóng chat (Floating Button) */}
+          {!isChatOpen && (
+            <button 
+              onClick={() => setIsChatOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-2xl hover:scale-110 hover:-translate-y-1 active:scale-95 transition-all duration-200 flex items-center justify-center group relative animate-bounce"
+            >
+              <MessageSquare className="w-7 h-7" />
+              <span className="absolute right-16 bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-md">
+                Bạn có khúc mắc gì thì đừng ngại hỏi tôi nhé!
+              </span>
+            </button>
+          )}
+
+          {/* 2. Khung giao diện cửa sổ Chatbox */}
+          {isChatOpen && (
+            <div className="bg-white w-[360px] md:w-[400px] h-[500px] rounded-2xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-fade-in-up">
+              {/* Header của Chatbox */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm animate-pulse">
+                    <MessageSquare className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm">AI Chatbot</h4>
+                    <p className="text-[11px] text-blue-100 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block"></span> Đang trực tuyến
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsChatOpen(false)}
+                  className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Vùng hiển thị nội dung tin nhắn */}
+              <div className="flex-1 p-4 overflow-y-auto bg-slate-50 space-y-3 flex flex-col">
+                {messages.map((msg) => (
+                  <div 
+                    key={msg.id} 
+                    className={`max-w-[80%] p-3.5 rounded-2xl text-sm font-medium leading-relaxed shadow-sm transition-all ${
+                      msg.isBot 
+                        ? 'bg-white text-slate-800 border border-slate-100 rounded-tl-none self-start whitespace-pre-wrap' 
+                        : 'bg-blue-600 text-white rounded-tr-none self-end'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                ))}
+
+                {isBotTyping && (
+                  <div className="bg-white border border-slate-100 p-3.5 rounded-2xl rounded-tl-none text-slate-500 text-sm font-medium self-start shadow-sm flex items-center gap-1.5 animate-pulse">
+                    <span>AI chatbot đang gõ</span>
+                    <span className="flex gap-0.5 mt-1">
+                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Ô nhập dữ liệu đầu vào và gửi tin nhắn */}
+              <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2 items-center">
+                <input 
+                  type="text" 
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Hỏi về xác thực, Smart Contract..." 
+                  spellCheck="false"
+                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm text-slate-700 font-medium"
+                />
+                <button 
+                  type="submit"
+                  disabled={!chatInput.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white p-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
       
       {/* Footer */}
       <footer className="bg-slate-900 py-12 border-t border-slate-800">

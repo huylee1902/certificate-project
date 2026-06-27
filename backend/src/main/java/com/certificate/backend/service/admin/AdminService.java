@@ -1,10 +1,13 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.admin;
 
 import com.certificate.backend.exception.AppException;
 import com.certificate.backend.model.entity.SchoolEntity;
 import com.certificate.backend.model.enums.ErrorCode;
 import com.certificate.backend.model.enums.SchoolStatus;
 import com.certificate.backend.repository.SchoolRepository;
+import com.certificate.backend.service.blockchain.BlockchainService;
+import com.certificate.backend.service.auth.EmailService;
+import com.certificate.backend.service.blockchain.WalletService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -68,6 +71,7 @@ public class AdminService {
                 activationLink
         );
         school.setStatus(SchoolStatus.APPROVED);
+        school.setApprovedAt(LocalDateTime.now());
         auditLogService.logAction(schoolId,"Duyệt tài khoản","Admin đã duyệt tài khoản tổ chức","System Admin");
         schoolRepository.save(school);
 
@@ -85,6 +89,18 @@ public class AdminService {
 
         school.setStatus(SchoolStatus.REJECTED);
         schoolRepository.save(school);
+
+        String schoolEmail = school.getUser().getEmail();
+        if (schoolEmail != null) {
+            emailService.sendNotificationEmail(
+                    schoolEmail,
+                    school.getSchoolName(),
+                    "Thông báo: Hồ sơ đăng ký tổ chức bị từ chối",
+                    "BỊ TỪ CHỐI DUYỆT ",
+                    "Yêu cầu tham gia hệ thống CertiChain của tổ chức đã bị từ chối do hồ sơ không đáp ứng đủ tiêu chuẩn xác thực hoặc thiếu thông tin pháp lý pháp nhân.",
+                    false
+            );
+        }
     }
 
     @Transactional
@@ -102,6 +118,18 @@ public class AdminService {
         school.setStatus(SchoolStatus.SUSPENDED);
         auditLogService.logAction(schoolId,"Khóa tài khoản","Admin đã khóa tài khoản tổ chức!","System Admin");
         schoolRepository.save(school);
+
+        String schoolEmail = school.getUser().getEmail();
+        if (schoolEmail != null) {
+            emailService.sendNotificationEmail(
+                    schoolEmail,
+                    school.getSchoolName(),
+                    "Cảnh báo: Tài khoản tổ chức đã bị tạm khóa",
+                    "ĐÃ BỊ TẠM KHÓA ",
+                    "Tài khoản quản lý và quyền tương tác mạng lưới Blockchain của tổ chức đã bị Admin tạm khóa trên toàn hệ thống.\nMọi hoạt động cấp phát, thu hồi văn bằng hiện tại đều bị đình chỉ tạm thời.",
+                    false
+            );
+        }
     }
 
     @Transactional
@@ -119,6 +147,18 @@ public class AdminService {
         school.setStatus(SchoolStatus.APPROVED);
         auditLogService.logAction(schoolId,"Mở khóa","Admin đã khóa tài khoản tổ chức!","System Admin");
         schoolRepository.save(school);
+
+        String schoolEmail = school.getUser().getEmail();
+        if (schoolEmail != null) {
+            emailService.sendNotificationEmail(
+                    schoolEmail,
+                    school.getSchoolName(),
+                    "Thông báo: Khôi phục và Kích hoạt lại tài khoản",
+                    "ĐANG HOẠT ĐỘNG ",
+                    "Chúc mừng! Tài khoản của quý tổ chức đã được Admin phê duyệt khôi phục và mở khóa thành công.\nHiện tại nhà trường đã có thể đăng nhập, sử dụng các chức năng Dashboard và tiến hành ký số/cấp phát văn bằng trên Blockchain bình thường.",
+                    true
+            );
+        }
 
     }
 }

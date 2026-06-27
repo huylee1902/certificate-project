@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.auth;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -58,33 +58,28 @@ public class EmailService {
         }
     }
 
-    @Async // Vẫn chạy ngầm để Frontend không bị chờ lâu
-    public void sendOtpEmail(String to, String otpCode) {
+    @Async
+    public void sendOtpEmail(String to, String otpCode, String subject, String actionName) {
         try {
-            // 1. Truyền mã OTP vào file HTML
+            // Truyền các biến động vào HTML
             Context context = new Context();
             context.setVariable("otpCode", otpCode);
+            context.setVariable("actionName", actionName); // Truyền mục đích gửi OTP vào đây
 
-            // 2. Render file "email-otp.html" (chúng ta sẽ tạo file này ở bước 2)
             String htmlBody = templateEngine.process("email-otp", context);
 
-            // 3. Khởi tạo đối tượng Thư
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            // Cấu hình người gửi
             helper.setFrom(systemEmail, "CertiChain Security");
-
-            // Cấu hình người nhận và tiêu đề
             helper.setTo(to);
-            helper.setSubject("Mã xác nhận bảo mật - Đổi Email hệ thống");
-            helper.setText(htmlBody, true); // true = HTML format
+            helper.setSubject(subject); // Tiêu đề email động
+            helper.setText(htmlBody, true);
 
-            // Ra lệnh gửi
             mailSender.send(message);
-            System.out.println("Đã gửi email OTP thành công tới: " + to);
+            System.out.println("Đã gửi email OTP (" + actionName + ") thành công tới: " + to);
 
-        } catch (MessagingException | UnsupportedEncodingException e) {
+        } catch (Exception e) {
             System.err.println("Lỗi khi gửi email OTP đến " + to + ": " + e.getMessage());
         }
     }
@@ -115,6 +110,34 @@ public class EmailService {
 
         } catch (Exception e) {
             System.err.println("Lỗi khi gửi email thông báo cấp bằng đến " + to + ": " + e.getMessage());
+        }
+    }
+
+    @Async
+    public void sendNotificationEmail(String to, String schoolName, String title, String statusText, String message, boolean isSuccess) {
+        try {
+            Context context = new Context();
+            context.setVariable("schoolName", schoolName);
+            context.setVariable("title", title);
+            context.setVariable("statusText", statusText);
+            context.setVariable("message", message);
+            context.setVariable("isSuccess", isSuccess); // Quyết định màu sắc xanh/đỏ
+
+            String htmlBody = templateEngine.process("school-status-email", context);
+
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            helper.setFrom(systemEmail, "CertiChain Admin Management");
+            helper.setTo(to);
+            helper.setSubject("CertiChain - " + title); // Tiêu đề thư (Subject)
+            helper.setText(htmlBody, true);
+
+            mailSender.send(mimeMessage);
+            System.out.println("Đã gửi email thông báo trạng thái tới trường: " + schoolName);
+
+        } catch (Exception e) {
+            System.err.println("Lỗi khi gửi email thông báo trạng thái đến " + to + ": " + e.getMessage());
         }
     }
 }

@@ -1,4 +1,4 @@
-package com.certificate.backend.service;
+package com.certificate.backend.service.school.issuse;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.client.j2se.MatrixToImageWriter;
@@ -15,7 +15,6 @@ import org.thymeleaf.context.Context;
 import org.xhtmlrenderer.pdf.ITextRenderer;
 
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -74,7 +73,6 @@ public class PdfExportService {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ITextRenderer renderer = new ITextRenderer();
 
-            // Nạp đủ bộ font Times New Roman để không bị lỗi Font tiếng Việt
             addFont(renderer, "fonts/times.ttf");
             addFont(renderer, "fonts/timesbd.ttf");
             addFont(renderer, "fonts/timesi.ttf");
@@ -96,7 +94,7 @@ public class PdfExportService {
     // Hàm phụ trợ tạo QR Code thành chuỗi Base64
     private String generateQRCodeBase64(String text) throws Exception {
         QRCodeWriter qrCodeWriter = new QRCodeWriter();
-        // Kích thước 150x150 là vừa đẹp cho góc văn bằng
+
         BitMatrix bitMatrix = qrCodeWriter.encode(text, BarcodeFormat.QR_CODE, 150, 150);
         ByteArrayOutputStream pngOutputStream = new ByteArrayOutputStream();
         MatrixToImageWriter.writeToStream(bitMatrix, "PNG", pngOutputStream);
